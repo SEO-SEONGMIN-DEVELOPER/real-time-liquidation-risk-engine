@@ -5,6 +5,18 @@ spring:
   application:
     name: risk-engine
 
+# Binance Futures WebSocket 설정
+binance:
+  ws-base-url: wss://fstream.binance.com
+  symbols:
+    - btcusdt
+    - ethusdt
+  streams:
+    - markPrice
+  mark-price-speed: 1000
+  reconnect-interval-ms: 5000
+  max-reconnect-attempts: 0
+
 ---
 # Local Profile
 spring:

@@ -39,6 +39,12 @@ dependencies {
     // Spring Boot Configuration Processor
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
+    // OkHttp WebSocket Client
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Jackson (JSON 파싱)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
     // Database
     runtimeOnly 'org.postgresql:postgresql'
     runtimeOnly 'com.h2database:h2'
