@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head><title>Icon Generator</title></head>
+<body>
+<p>아래 Canvas를 우클릭하여 PNG로 저장하세요.</p>
+
+<h3>16x16</h3><canvas id="c16" width="16" height="16"></canvas>
+<h3>48x48</h3><canvas id="c48" width="48" height="48"></canvas>
+<h3>128x128</h3><canvas id="c128" width="128" height="128"></canvas>
+
+<script>
+function drawIcon(id, size) {
+  const c = document.getElementById(id);
+  const ctx = c.getContext('2d');
+  const s = size;
+
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, s, s);
+
+  const bars = [0.4, 0.7, 1.0, 0.6, 0.3];
+  const barH = s / (bars.length + 1);
+
+  bars.forEach((ratio, i) => {
+    const y = barH * (i + 0.5);
+    const w = ratio * s * 0.7;
+    ctx.fillStyle = i < 2 ? 'rgba(38,166,154,0.8)' : (i > 2 ? 'rgba(234,57,67,0.8)' : '#fff');
+    ctx.fillRect(s - w - s * 0.05, y, w, barH * 0.7);
+  });
+}
+drawIcon('c16', 16);
+drawIcon('c48', 48);
+drawIcon('c128', 128);
+</script>
+</body>
+</html>

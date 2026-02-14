@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="popup">
+    <div class="header">
+      <h1>Liquidation Heatmap</h1>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-enabled" checked />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="settings">
+      <div class="setting-row">
+        <label for="price-range">가격 범위 (%)</label>
+        <div class="input-group">
+          <input type="range" id="price-range" min="2" max="30" value="10" />
+          <span id="price-range-val" class="value">10%</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label for="bucket-count">해상도 (구간 수)</label>
+        <div class="input-group">
+          <input type="range" id="bucket-count" min="20" max="120" step="10" value="60" />
+          <span id="bucket-count-val" class="value">60</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label for="overlay-width">패널 너비 (px)</label>
+        <div class="input-group">
+          <input type="range" id="overlay-width" min="140" max="400" step="10" value="180" />
+          <span id="overlay-width-val" class="value">180</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label for="opacity">투명도</label>
+        <div class="input-group">
+          <input type="range" id="opacity" min="0.3" max="1" step="0.05" value="0.88" />
+          <span id="opacity-val" class="value">88%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <span class="dot long"></span>
+        <span>Long 청산 (가격 하락 시)</span>
+      </div>
+      <div class="legend-item">
+        <span class="dot short"></span>
+        <span>Short 청산 (가격 상승 시)</span>
+      </div>
+    </div>
+
+    <div class="footer">
+      v0.1.0 · Binance Futures 전용
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

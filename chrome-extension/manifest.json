@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Liquidation Heatmap for Binance Futures",
+  "version": "0.1.0",
+  "description": "바이낸스 선물 차트 위에 청산맵 히스토그램을 오버레이합니다.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://*.binance.com/*",
+    "https://*.binance.bh/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.binance.com/*",
+        "https://*.binance.bh/*"
+      ],
+      "js": [
+        "content/liquidation-calc.js",
+        "content/histogram-renderer.js",
+        "content/content.js"
+      ],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

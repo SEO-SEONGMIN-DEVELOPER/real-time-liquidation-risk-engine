@@ -1,0 +1,115 @@
+#liq-heatmap-panel {
+  position: fixed;
+  z-index: 10000;
+  background: #181A20;
+  border: 1px solid #2B3139;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  font-family: 'BinancePlex', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+
+#liq-heatmap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  background: #1E2329;
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+  border-bottom: 1px solid #2B3139;
+  flex-shrink: 0;
+}
+
+#liq-heatmap-header:active { cursor: grabbing; }
+
+#liq-heatmap-header .title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #EAECEF;
+  letter-spacing: 0;
+}
+
+#liq-heatmap-header .close-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: #5E6673;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+  pointer-events: auto;
+  padding: 0;
+}
+
+#liq-heatmap-header .close-btn:hover {
+  color: #EAECEF;
+}
+
+#liq-heatmap-canvas {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+
+#liq-heatmap-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  height: 24px;
+  padding: 0 12px;
+  background: #181A20;
+  border-top: 1px solid #2B3139;
+  flex-shrink: 0;
+}
+
+#liq-heatmap-footer .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #848E9C;
+}
+
+#liq-heatmap-footer .dot {
+  width: 8px;
+  height: 3px;
+  border-radius: 0;
+}
+
+#liq-heatmap-footer .dot.long { background: #F6465D; }
+#liq-heatmap-footer .dot.short { background: #0ECB81; }
+
+#liq-heatmap-resize {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  pointer-events: auto;
+  z-index: 10001;
+}
+
+#liq-heatmap-resize::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid #474D57;
+  border-bottom: 2px solid #474D57;
+}
+
+#liq-heatmap-resize:hover::after {
+  border-color: #848E9C;
+}

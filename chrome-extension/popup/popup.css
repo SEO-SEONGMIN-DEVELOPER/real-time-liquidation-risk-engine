@@ -1,0 +1,164 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 300px;
+  background: #181A20;
+  color: #EAECEF;
+  font-family: 'BinancePlex', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+}
+
+.popup {
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #EAECEF;
+}
+
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  background: #474D57;
+  border-radius: 22px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: #EAECEF;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.toggle input:checked + .slider {
+  background: #F0B90B;
+}
+
+.toggle input:checked + .slider::before {
+  transform: translateX(18px);
+}
+
+.divider {
+  height: 1px;
+  background: #2B3139;
+  margin: 12px 0;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setting-row label {
+  display: block;
+  font-size: 12px;
+  color: #848E9C;
+  margin-bottom: 4px;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-group input[type='range'] {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #2B3139;
+  border-radius: 2px;
+  outline: none;
+}
+
+.input-group input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #F0B90B;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.input-group input[type='range']::-webkit-slider-thumb:hover {
+  background: #FCD535;
+}
+
+.value {
+  font-size: 12px;
+  font-weight: 500;
+  color: #F0B90B;
+  min-width: 36px;
+  text-align: right;
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #848E9C;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.dot.long {
+  background: #F6465D;
+}
+
+.dot.short {
+  background: #0ECB81;
+}
+
+.footer {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 10px;
+  color: #5E6673;
+}
