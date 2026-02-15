@@ -17,6 +17,7 @@
       "js": [
         "content/liquidation-calc.js",
         "content/histogram-renderer.js",
+        "content/risk-widget-renderer.js",
         "content/content.js"
       ],
       "css": ["content/content.css"],
