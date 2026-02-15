@@ -30,6 +30,7 @@
   };
 
   let riskWidgetTimer = null;
+  const BACKEND_BASE_URL = 'http://localhost:8080';
 
   let isDragging = false;
   let dragOffsetX = 0;
@@ -542,9 +543,11 @@
     const currentPrice = extractCurrentPrice();
     if (!currentPrice || currentPrice <= 0) return;
 
+    const liqPrice = userPosition.liquidationPrice;
     const side = userPosition.side || 'LONG';
     const symbol = extractSymbolFromPage() || 'BTCUSDT';
-    updateRiskWidgetWithLocalCalc(symbol, currentPrice, side);
+
+    fetchCascadeRisk(symbol, currentPrice, liqPrice || 0, side);
   }
 
   function extractSymbolFromPage() {
@@ -557,79 +560,21 @@
     return null;
   }
 
-  function updateRiskWidgetWithLocalCalc(symbol, currentPrice, side) {
-    const liqPrice = userPosition.liquidationPrice;
-    if (!liqPrice || liqPrice <= 0) {
-      RiskWidgetRenderer.update({
-        symbol: symbol,
-        currentPrice: currentPrice,
-        userLiquidationPrice: null,
-        positionSide: side,
-        riskLevel: null,
-        cascadeReachProbability: null,
-        densityScore: null,
-        densityLevel: null,
-        distancePercent: null,
-        direction: null,
-        depthBetween: null,
-        notionalBetween: null,
-        levelCount: null,
-        depthRatio: null,
-        clustersInPath: [],
-        oiPressureScore: null,
-        liqIntensityScore: null,
-        imbalanceScore: null,
-        marketPressureTotal: null,
+  function fetchCascadeRisk(symbol, currentPrice, liqPrice, side) {
+    const url = `${BACKEND_BASE_URL}/api/risk/cascade?symbol=${symbol}&currentPrice=${currentPrice}&userLiquidationPrice=${liqPrice}&positionSide=${side}`;
+
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(report => {
+        console.log('[LiqHeatmap] Cascade risk:', report);
+        RiskWidgetRenderer.update(report);
+      })
+      .catch(err => {
+        console.debug('[LiqHeatmap] Risk API unavailable:', err.message);
       });
-      return;
-    }
-
-    const distance = Math.abs(currentPrice - liqPrice);
-    const distancePercent = (distance / currentPrice) * 100;
-    const direction = side === 'SHORT' ? 'UP' : 'DOWN';
-
-    let riskLevel = 'LOW';
-    if (distancePercent <= 1) riskLevel = 'CRITICAL';
-    else if (distancePercent <= 3) riskLevel = 'HIGH';
-    else if (distancePercent <= 8) riskLevel = 'MEDIUM';
-
-    let densityScore = 0;
-    if (distancePercent <= 1) densityScore = 90;
-    else if (distancePercent <= 2) densityScore = 75;
-    else if (distancePercent <= 5) densityScore = 50;
-    else if (distancePercent <= 10) densityScore = 30;
-    else densityScore = 15;
-
-    let densityLevel = 'WALL';
-    if (densityScore >= 80) densityLevel = 'THIN';
-    else if (densityScore >= 60) densityLevel = 'SPARSE';
-    else if (densityScore >= 40) densityLevel = 'MODERATE';
-    else if (densityScore >= 20) densityLevel = 'THICK';
-
-    let reachProb = Math.max(0, Math.min(100, 100 - distancePercent * 12));
-
-    RiskWidgetRenderer.update({
-      symbol: symbol,
-      currentPrice: currentPrice,
-      userLiquidationPrice: liqPrice,
-      positionSide: side,
-      riskLevel: riskLevel,
-      cascadeReachProbability: Math.round(reachProb * 10) / 10,
-      densityScore: densityScore,
-      densityLevel: densityLevel,
-      distancePercent: Math.round(distancePercent * 100) / 100,
-      distance: distance,
-      direction: direction,
-      depthBetween: null,
-      notionalBetween: null,
-      levelCount: null,
-      depthRatio: null,
-      clustersInPath: [],
-      oiPressureScore: null,
-      liqIntensityScore: null,
-      imbalanceScore: null,
-      marketPressureTotal: null,
-    });
   }
 
   bootstrap();

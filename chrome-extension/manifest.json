@@ -6,7 +6,8 @@
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://*.binance.com/*",
-    "https://*.binance.bh/*"
+    "https://*.binance.bh/*",
+    "http://localhost:8080/*"
   ],
   "content_scripts": [
     {
