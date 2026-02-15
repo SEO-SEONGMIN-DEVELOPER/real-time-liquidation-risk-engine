@@ -14,16 +14,15 @@ import java.util.List;
 public class BinanceProperties {
 
     private String wsBaseUrl = "wss://fstream.binance.com";
+    private String restBaseUrl = "https://fapi.binance.com";
 
     private List<String> symbols = List.of("btcusdt", "ethusdt");
-
-    private List<String> streams = List.of("markPrice");
+    private List<String> streams = List.of("markPrice", "forceOrder");
 
     private int markPriceSpeed = 1000;
-
     private long reconnectIntervalMs = 5000;
-
     private int maxReconnectAttempts = 0;
+    private long openInterestPollIntervalMs = 3000;
 
     public String buildCombinedStreamUrl() {
         StringBuilder sb = new StringBuilder(wsBaseUrl).append("/stream?streams=");
