@@ -2,8 +2,10 @@ package com.liquidation.riskengine.infra.binance.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lmax.disruptor.RingBuffer;
 import com.liquidation.riskengine.infra.binance.config.BinanceProperties;
-import com.liquidation.riskengine.infra.binance.handler.BinanceMessageHandler;
+import com.liquidation.riskengine.infra.disruptor.event.EventType;
+import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +19,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -32,7 +33,7 @@ public class BinanceWebSocketClient {
     private final OkHttpClient okHttpClient;
     private final BinanceProperties properties;
     private final ObjectMapper objectMapper;
-    private final List<BinanceMessageHandler> handlers;
+    private final RingBuffer<MarketDataEvent> marketDataRingBuffer;
 
     private WebSocket webSocket;
     private final AtomicBoolean connected = new AtomicBoolean(false);
@@ -100,16 +101,39 @@ public class BinanceWebSocketClient {
             if (root.has("stream") && root.has("data")) {
                 String streamName = root.get("stream").asText();
                 String dataJson = root.get("data").toString();
+                EventType eventType = EventType.fromStream(streamName);
 
-                handlers.stream()
-                        .filter(handler -> handler.supports(streamName))
-                        .forEach(handler -> handler.handle(dataJson));
+                if (eventType == EventType.UNKNOWN) {
+                    log.debug("[Binance WS] 미지원 스트림: {}", streamName);
+                    return;
+                }
+
+                String symbol = extractSymbol(streamName);
+
+                marketDataRingBuffer.publishEvent((event, sequence) -> {
+                    event.clear();
+                    event.setType(eventType);
+                    event.setSymbol(symbol);
+                    event.setRawJson(dataJson);
+                    event.setIngestNanoTime(System.nanoTime());
+                });
+
+                log.debug("[Binance WS] RingBuffer publish: type={}, symbol={}, seq={}",
+                        eventType, symbol, marketDataRingBuffer.getCursor());
             } else {
                 log.debug("[Binance WS] 알 수 없는 메시지 형식: {}", text);
             }
         } catch (Exception e) {
             log.error("[Binance WS] 메시지 라우팅 실패: {}", text, e);
         }
+    }
+
+    private String extractSymbol(String streamName) {
+        int atIndex = streamName.indexOf('@');
+        if (atIndex > 0) {
+            return streamName.substring(0, atIndex).toUpperCase();
+        }
+        return streamName.toUpperCase();
     }
 
     private class BinanceWebSocketListener extends WebSocketListener {

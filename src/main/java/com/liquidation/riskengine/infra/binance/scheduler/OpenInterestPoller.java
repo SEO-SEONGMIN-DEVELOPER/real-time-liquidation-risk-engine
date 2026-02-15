@@ -1,9 +1,11 @@
 package com.liquidation.riskengine.infra.binance.scheduler;
 
+import com.lmax.disruptor.RingBuffer;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.infra.binance.client.BinanceRestClient;
 import com.liquidation.riskengine.infra.binance.config.BinanceProperties;
-import com.liquidation.riskengine.infra.redis.service.RedisTimeSeriesService;
+import com.liquidation.riskengine.infra.disruptor.event.EventType;
+import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,7 +25,7 @@ public class OpenInterestPoller {
 
     private final BinanceRestClient restClient;
     private final BinanceProperties properties;
-    private final RedisTimeSeriesService redisTimeSeriesService;
+    private final RingBuffer<MarketDataEvent> marketDataRingBuffer;
 
     private final Map<String, BigDecimal> previousOiMap = new ConcurrentHashMap<>();
 
@@ -54,10 +56,17 @@ public class OpenInterestPoller {
                         .timestamp(Instant.now().toEpochMilli())
                         .build();
 
-                redisTimeSeriesService.saveOpenInterestSnapshot(snapshot);
+                marketDataRingBuffer.publishEvent((event, sequence) -> {
+                    event.clear();
+                    event.setType(EventType.OI_UPDATE);
+                    event.setSymbol(upperSymbol);
+                    event.setOpenInterest(snapshot);
+                    event.setIngestNanoTime(System.nanoTime());
+                });
+
                 previousOiMap.put(upperSymbol, currentOi);
 
-                log.info("[OI Poll] symbol={}, oi={}, change={}, changePercent={}% → Redis 저장 완료",
+                log.info("[OI Poll] symbol={}, oi={}, change={}, changePercent={}% → RingBuffer publish 완료",
                         upperSymbol, currentOi, change, changePercent);
             });
         }
