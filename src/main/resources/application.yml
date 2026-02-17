@@ -15,7 +15,9 @@ binance:
   streams:
     - markPrice
     - forceOrder
+    - depth@500ms
   mark-price-speed: 1000
+  depth-level: "20"
   reconnect-interval-ms: 5000
   max-reconnect-attempts: 0
   open-interest-poll-interval-ms: 3000

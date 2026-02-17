@@ -2,6 +2,7 @@ package com.liquidation.riskengine.infra.redis.service;
 
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
+import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -25,6 +26,8 @@ public class RedisTimeSeriesService {
     private static final String LIQ_EVENTS_KEY = "liq:events:";
     private static final String OI_SNAPSHOTS_KEY = "oi:snapshots:";
     private static final String OI_LATEST_KEY = "oi:latest:";
+    private static final String OB_SNAPSHOTS_KEY = "ob:snapshots:";
+    private static final String OB_LATEST_KEY = "ob:latest:";
     private static final Duration RETENTION_PERIOD = Duration.ofHours(24);
 
     public void saveLiquidationEvent(LiquidationEvent event) {
@@ -93,12 +96,52 @@ public class RedisTimeSeriesService {
         return redisTemplate.opsForValue().get(latestKey);
     }
 
+    public void saveOrderBookSnapshot(OrderBookSnapshot snapshot) {
+        String key = OB_SNAPSHOTS_KEY + snapshot.getSymbol().toUpperCase();
+        redisTemplate.opsForZSet().add(key, snapshot, snapshot.getTimestamp());
+
+        String latestKey = OB_LATEST_KEY + snapshot.getSymbol().toUpperCase();
+        redisTemplate.opsForValue().set(latestKey, snapshot);
+
+        log.debug("[Redis] 호가 스냅샷 저장: symbol={}, bestBid={}, bestAsk={}, spread={}, ts={}",
+                snapshot.getSymbol(), snapshot.getBestBid(), snapshot.getBestAsk(),
+                snapshot.getSpread(), snapshot.getTimestamp());
+    }
+
+    public List<OrderBookSnapshot> getOrderBookSnapshots(String symbol, long fromTimestamp, long toTimestamp) {
+        String key = OB_SNAPSHOTS_KEY + symbol.toUpperCase();
+        Set<ZSetOperations.TypedTuple<Object>> results =
+                redisTemplate.opsForZSet().rangeByScoreWithScores(key, fromTimestamp, toTimestamp);
+        if (results == null || results.isEmpty()) return Collections.emptyList();
+        return results.stream()
+                .map(ZSetOperations.TypedTuple::getValue)
+                .filter(OrderBookSnapshot.class::isInstance)
+                .map(OrderBookSnapshot.class::cast)
+                .toList();
+    }
+
+    public List<OrderBookSnapshot> getRecentOrderBookSnapshots(String symbol, Duration window) {
+        long now = Instant.now().toEpochMilli();
+        long from = now - window.toMillis();
+        return getOrderBookSnapshots(symbol, from, now);
+    }
+
+    public OrderBookSnapshot getLatestOrderBook(String symbol) {
+        String latestKey = OB_LATEST_KEY + symbol.toUpperCase();
+        Object value = redisTemplate.opsForValue().get(latestKey);
+        if (value instanceof OrderBookSnapshot snapshot) {
+            return snapshot;
+        }
+        return null;
+    }
+
     @Scheduled(fixedRate = 300_000)
     public void evictExpiredData() {
         long cutoff = Instant.now().minus(RETENTION_PERIOD).toEpochMilli();
 
         evictByPattern(LIQ_EVENTS_KEY, cutoff);
         evictByPattern(OI_SNAPSHOTS_KEY, cutoff);
+        evictByPattern(OB_SNAPSHOTS_KEY, cutoff);
 
         log.debug("[Redis] 만료 데이터 정리 완료 (cutoff={})", cutoff);
     }

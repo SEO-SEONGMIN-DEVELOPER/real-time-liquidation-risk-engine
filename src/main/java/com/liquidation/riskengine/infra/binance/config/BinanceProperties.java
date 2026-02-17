@@ -17,9 +17,10 @@ public class BinanceProperties {
     private String restBaseUrl = "https://fapi.binance.com";
 
     private List<String> symbols = List.of("btcusdt", "ethusdt");
-    private List<String> streams = List.of("markPrice", "forceOrder");
+    private List<String> streams = List.of("markPrice", "forceOrder", "depth@500ms");
 
     private int markPriceSpeed = 1000;
+    private String depthLevel = "20";
     private long reconnectIntervalMs = 5000;
     private int maxReconnectAttempts = 0;
     private long openInterestPollIntervalMs = 3000;
