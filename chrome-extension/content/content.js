@@ -6,6 +6,7 @@
   let chartCanvas = null;
   let isEnabled = true;
   let updateTimer = null;
+  let positionScrapeTimer = null;
   let settings = {
     priceRangePercent: 10,
     priceBucketCount: 60,
@@ -13,6 +14,19 @@
     panelHeight: 400,
     opacity: 0.95,
     updateIntervalMs: 1000,
+  };
+
+  let userPosition = {
+    symbol: null,
+    side: null,
+    entryPrice: null,
+    liquidationPrice: null,
+    leverage: null,
+    size: null,
+    margin: null,
+    pnl: null,
+    roe: null,
+    markPrice: null,
   };
 
   let isDragging = false;
@@ -146,6 +160,7 @@
 
     togglePanel();
     startUpdateLoop();
+    startPositionScraping();
     console.log('[LiqHeatmap] 플로팅 패널 삽입 완료');
   }
 
@@ -285,6 +300,191 @@
     });
 
     HistogramRenderer.render(data);
+  }
+
+  function startPositionScraping() {
+    scrapePosition();
+    if (positionScrapeTimer) clearInterval(positionScrapeTimer);
+    positionScrapeTimer = setInterval(() => {
+      if (isEnabled) scrapePosition();
+    }, 2000);
+  }
+
+  function scrapePosition() {
+    try {
+      const posData = extractPositionFromDOM();
+      if (posData && posData.found) {
+        userPosition = { ...userPosition, ...posData };
+        console.log('[LiqHeatmap] 포지션 감지:', userPosition);
+      }
+    } catch (e) {
+      console.debug('[LiqHeatmap] 포지션 스크래핑 오류:', e);
+    }
+  }
+
+  function extractPositionFromDOM() {
+    const result = { found: false };
+
+    const rows = document.querySelectorAll(
+      '[class*="position"] tr, [class*="Position"] tr, ' +
+      '[class*="openPositions"] tr, [class*="positions-table"] tr, ' +
+      'table tr'
+    );
+
+    for (const row of rows) {
+      const cells = row.querySelectorAll('td, div[class*="cell"], div[class*="Cell"]');
+      const text = row.textContent || '';
+
+      const hasSymbol = /BTCUSDT|ETHUSDT|BTC\/USDT|ETH\/USDT/i.test(text);
+      const hasLiq = /liq|청산/i.test(text) || /\d+\.\d+/.test(text);
+
+      if (!hasSymbol && !hasLiq) continue;
+
+      const symbolMatch = text.match(/(BTC|ETH)(USDT|\/USDT)/i);
+      if (symbolMatch) {
+        result.symbol = symbolMatch[0].replace('/', '').toUpperCase();
+      }
+
+      const sideMatch = text.match(/\b(Long|Short|LONG|SHORT|Buy|Sell)\b/i);
+      if (sideMatch) {
+        result.side = sideMatch[0].toUpperCase();
+        if (result.side === 'BUY') result.side = 'LONG';
+        if (result.side === 'SELL') result.side = 'SHORT';
+      }
+
+      const leverageMatch = text.match(/(\d+)[xX×]/);
+      if (leverageMatch) {
+        result.leverage = parseInt(leverageMatch[1]);
+      }
+
+      const numbers = [];
+      const numRegex = /(?<![a-zA-Z])(\d[\d,]*\.?\d*)(?![xX×%a-zA-Z])/g;
+      let m;
+      while ((m = numRegex.exec(text)) !== null) {
+        const val = parseFloat(m[1].replace(/,/g, ''));
+        if (val > 0 && !isNaN(val)) numbers.push(val);
+      }
+
+      if (numbers.length >= 2 && result.symbol) {
+        result.found = true;
+        break;
+      }
+    }
+
+    if (!result.found) {
+      result.found = scrapePositionPanel(result);
+    }
+
+    return result;
+  }
+
+  function scrapePositionPanel(result) {
+    const selectors = [
+      '[class*="positionInfo"]',
+      '[class*="PositionInfo"]',
+      '[class*="position-info"]',
+      '[class*="contractDetail"]',
+      '[class*="ContractDetail"]',
+      '[class*="openPosition"]',
+      '[class*="positionArea"]',
+    ];
+
+    let container = null;
+    for (const sel of selectors) {
+      container = document.querySelector(sel);
+      if (container) break;
+    }
+
+    if (!container) {
+      const allDivs = document.querySelectorAll('div');
+      for (const div of allDivs) {
+        const t = div.textContent || '';
+        if (t.includes('Entry Price') && t.includes('Liq. Price') && t.length < 2000) {
+          container = div;
+          break;
+        }
+        if (t.includes('진입 가격') && t.includes('청산 가격') && t.length < 2000) {
+          container = div;
+          break;
+        }
+      }
+    }
+
+    if (!container) return false;
+
+    const text = container.textContent || '';
+
+    const symbolMatch = text.match(/(BTC|ETH)(USDT|\/USDT)/i);
+    if (symbolMatch) result.symbol = symbolMatch[0].replace('/', '').toUpperCase();
+
+    const sideMatch = text.match(/\b(Long|Short|LONG|SHORT)\b/i);
+    if (sideMatch) result.side = sideMatch[0].toUpperCase();
+
+    const leverageMatch = text.match(/(\d+)[xX×]/);
+    if (leverageMatch) result.leverage = parseInt(leverageMatch[1]);
+
+    const labelValuePairs = container.querySelectorAll('div, span, td');
+    for (let i = 0; i < labelValuePairs.length; i++) {
+      const el = labelValuePairs[i];
+      const label = (el.textContent || '').trim().toLowerCase();
+      const nextEl = labelValuePairs[i + 1];
+      const nextText = nextEl ? (nextEl.textContent || '').trim() : '';
+
+      if ((label.includes('entry price') || label.includes('진입 가격') || label === 'entry') && nextText) {
+        const val = parsePrice(nextText);
+        if (val) result.entryPrice = val;
+      }
+
+      if ((label.includes('liq. price') || label.includes('liquidation price') ||
+           label.includes('청산 가격') || label === 'liq.') && nextText) {
+        const val = parsePrice(nextText);
+        if (val) result.liquidationPrice = val;
+      }
+
+      if ((label.includes('mark price') || label.includes('마크 가격') || label === 'mark') && nextText) {
+        const val = parsePrice(nextText);
+        if (val) result.markPrice = val;
+      }
+
+      if ((label.includes('size') || label.includes('수량') || label === 'qty') && nextText) {
+        const val = parsePrice(nextText);
+        if (val) result.size = val;
+      }
+
+      if ((label.includes('margin') || label.includes('증거금')) && nextText) {
+        const val = parsePrice(nextText);
+        if (val) result.margin = val;
+      }
+
+      if ((label.includes('pnl') || label.includes('손익')) && nextText) {
+        const pnlMatch = nextText.match(/-?[\d,]+\.?\d*/);
+        if (pnlMatch) result.pnl = parseFloat(pnlMatch[0].replace(/,/g, ''));
+      }
+
+      if ((label.includes('roe') || label.includes('수익률')) && nextText) {
+        const roeMatch = nextText.match(/-?[\d.]+/);
+        if (roeMatch) result.roe = parseFloat(roeMatch[0]);
+      }
+    }
+
+    if (result.entryPrice || result.liquidationPrice) {
+      result.found = true;
+      return true;
+    }
+
+    const allText = text;
+    const entryMatch = allText.match(/(?:Entry\s*(?:Price)?|진입\s*(?:가격)?)\s*:?\s*([\d,]+\.?\d*)/i);
+    if (entryMatch) result.entryPrice = parseFloat(entryMatch[1].replace(/,/g, ''));
+
+    const liqMatch = allText.match(/(?:Liq\.?\s*(?:Price)?|청산\s*(?:가격)?)\s*:?\s*([\d,]+\.?\d*)/i);
+    if (liqMatch) result.liquidationPrice = parseFloat(liqMatch[1].replace(/,/g, ''));
+
+    if (result.entryPrice || result.liquidationPrice) {
+      result.found = true;
+      return true;
+    }
+
+    return false;
   }
 
   function extractCurrentPrice() {
