@@ -11,6 +11,7 @@ import com.liquidation.riskengine.infra.disruptor.event.RiskResultEventFactory;
 import com.liquidation.riskengine.infra.disruptor.handler.CacheUpdateHandler;
 import com.liquidation.riskengine.infra.disruptor.handler.JournalEventHandler;
 import com.liquidation.riskengine.infra.disruptor.handler.ParseEventHandler;
+import com.liquidation.riskengine.infra.disruptor.handler.RiskBroadcastHandler;
 import com.liquidation.riskengine.infra.disruptor.handler.RiskCalculationHandler;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class DisruptorConfig {
     private final JournalEventHandler journalEventHandler;
     private final CacheUpdateHandler cacheUpdateHandler;
     private final RiskCalculationHandler riskCalculationHandler;
+    private final RiskBroadcastHandler riskBroadcastHandler;
 
     private Disruptor<MarketDataEvent> ingestDisruptor;
     private Disruptor<RiskResultEvent> outputDisruptor;
@@ -78,7 +80,10 @@ public class DisruptorConfig {
                 new YieldingWaitStrategy()
         );
 
-        log.info("[Disruptor] Output RingBuffer 생성 완료 (size={}, wait=YieldingWaitStrategy, producer=SINGLE)",
+        outputDisruptor.handleEventsWith(riskBroadcastHandler);
+        outputDisruptor.start();
+
+        log.info("[Disruptor] Output 파이프라인 기동 완료: RiskResult → STOMP Broadcast | size={}, producer=SINGLE",
                 OUTPUT_BUFFER_SIZE);
 
         return outputDisruptor;
