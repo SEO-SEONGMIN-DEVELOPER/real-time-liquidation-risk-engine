@@ -11,6 +11,7 @@ import com.liquidation.riskengine.infra.disruptor.event.RiskResultEventFactory;
 import com.liquidation.riskengine.infra.disruptor.handler.CacheUpdateHandler;
 import com.liquidation.riskengine.infra.disruptor.handler.JournalEventHandler;
 import com.liquidation.riskengine.infra.disruptor.handler.ParseEventHandler;
+import com.liquidation.riskengine.infra.disruptor.handler.RiskCalculationHandler;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class DisruptorConfig {
     private final ParseEventHandler parseEventHandler;
     private final JournalEventHandler journalEventHandler;
     private final CacheUpdateHandler cacheUpdateHandler;
+    private final RiskCalculationHandler riskCalculationHandler;
 
     private Disruptor<MarketDataEvent> ingestDisruptor;
     private Disruptor<RiskResultEvent> outputDisruptor;
@@ -49,9 +51,13 @@ public class DisruptorConfig {
                 .handleEventsWith(parseEventHandler)
                 .then(journalEventHandler, cacheUpdateHandler);
 
+        ingestDisruptor
+                .after(cacheUpdateHandler)
+                .then(riskCalculationHandler);
+
         ingestDisruptor.start();
 
-        log.info("[Disruptor] Ingest 파이프라인 기동 완료: Parse → (Journal + Cache) | size={}, producer=SINGLE",
+        log.info("[Disruptor] Ingest 파이프라인 기동 완료: Parse → (Journal || Cache → RiskCalc) | size={}, producer=SINGLE",
                 INGEST_BUFFER_SIZE);
 
         return ingestDisruptor;
