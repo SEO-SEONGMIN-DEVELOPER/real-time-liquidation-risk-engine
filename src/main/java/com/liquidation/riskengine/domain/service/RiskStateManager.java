@@ -3,10 +3,10 @@ package com.liquidation.riskengine.domain.service;
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
+import com.liquidation.riskengine.domain.model.UserPosition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -28,13 +28,18 @@ public class RiskStateManager {
     private final Map<String, Deque<LiquidationEvent>> recentLiquidations = new ConcurrentHashMap<>();
     private final Map<String, UserPosition> userPositions = new ConcurrentHashMap<>();
 
-    public record UserPosition(String symbol, BigDecimal liquidationPrice, String positionSide) {}
-
-    public void registerPosition(String symbol, BigDecimal liquidationPrice, String positionSide) {
-        if (symbol == null) return;
-        String key = symbol.toUpperCase();
-        userPositions.put(key, new UserPosition(key, liquidationPrice, positionSide));
-        log.info("[RiskState] 포지션 등록: symbol={}, liqPrice={}, side={}", key, liquidationPrice, positionSide);
+    public void registerPosition(UserPosition position) {
+        if (position == null || position.getSymbol() == null) return;
+        String key = position.getSymbol().toUpperCase();
+        UserPosition normalized = UserPosition.builder()
+                .symbol(key)
+                .liquidationPrice(position.getLiquidationPrice())
+                .positionSide(position.getPositionSide())
+                .leverage(position.getLeverage())
+                .build();
+        userPositions.put(key, normalized);
+        log.info("[RiskState] 포지션 등록: symbol={}, liqPrice={}, side={}, leverage={}x",
+                key, position.getLiquidationPrice(), position.getPositionSide(), position.getLeverage());
     }
 
     public void removePosition(String symbol) {
