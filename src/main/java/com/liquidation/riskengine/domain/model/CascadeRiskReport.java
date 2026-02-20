@@ -28,5 +28,10 @@ public class CascadeRiskReport {
     private BigDecimal priceRangeLow;
     private BigDecimal priceRangeHigh;
 
+    private BigDecimal depthBetween;
+    private BigDecimal notionalBetween;
+    private int levelCount;
+    private double depthRatio;
+
     private long timestamp;
 }
