@@ -6,7 +6,6 @@ import com.liquidation.riskengine.infra.binance.dto.OrderBookDepthEvent;
 import com.liquidation.riskengine.infra.redis.service.RedisTimeSeriesService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -15,7 +14,7 @@ import java.util.Collections;
 import java.util.List;
 
 @Slf4j
-@Component
+@Deprecated(forRemoval = true)
 @RequiredArgsConstructor
 public class OrderBookMessageHandler implements BinanceMessageHandler {
 
