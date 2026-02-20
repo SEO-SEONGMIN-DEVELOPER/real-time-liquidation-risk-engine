@@ -6,6 +6,8 @@ import com.lmax.disruptor.RingBuffer;
 import com.liquidation.riskengine.infra.binance.config.BinanceProperties;
 import com.liquidation.riskengine.infra.disruptor.event.EventType;
 import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -30,10 +32,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequiredArgsConstructor
 public class BinanceWebSocketClient {
 
+    private static final double BACKPRESSURE_THRESHOLD = 0.9;
+
     private final OkHttpClient okHttpClient;
     private final BinanceProperties properties;
     private final ObjectMapper objectMapper;
     private final RingBuffer<MarketDataEvent> marketDataRingBuffer;
+    private final MeterRegistry meterRegistry;
 
     private WebSocket webSocket;
     private final AtomicBoolean connected = new AtomicBoolean(false);
@@ -41,8 +46,15 @@ public class BinanceWebSocketClient {
     private final AtomicInteger reconnectCount = new AtomicInteger(0);
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
+    private Counter backpressureDropCounter;
+
     @PostConstruct
     public void init() {
+        backpressureDropCounter = Counter.builder("disruptor.events.dropped")
+                .tag("reason", "backpressure")
+                .tag("source", "websocket")
+                .description("Events dropped at WebSocket producer due to RingBuffer backpressure")
+                .register(meterRegistry);
         connect();
     }
 
@@ -82,7 +94,7 @@ public class BinanceWebSocketClient {
 
         long delay = Math.min(
                 properties.getReconnectIntervalMs() * attempt,
-                60_000 
+                60_000
         );
 
         log.info("[Binance WS] {}ms 후 재연결 시도 ({}회차)", delay, attempt);
@@ -108,6 +120,14 @@ public class BinanceWebSocketClient {
                     return;
                 }
 
+                if (!eventType.isHighPriority() && isBackpressureActive()) {
+                    backpressureDropCounter.increment();
+                    log.warn("[Binance WS] 백프레셔 드롭: type={}, symbol={}, util={}%",
+                            eventType, extractSymbol(streamName),
+                            String.format("%.1f", getRingBufferUtilization() * 100));
+                    return;
+                }
+
                 String symbol = extractSymbol(streamName);
 
                 marketDataRingBuffer.publishEvent((event, sequence) -> {
@@ -126,6 +146,14 @@ public class BinanceWebSocketClient {
         } catch (Exception e) {
             log.error("[Binance WS] 메시지 라우팅 실패: {}", text, e);
         }
+    }
+
+    private boolean isBackpressureActive() {
+        return getRingBufferUtilization() > BACKPRESSURE_THRESHOLD;
+    }
+
+    private double getRingBufferUtilization() {
+        return 1.0 - ((double) marketDataRingBuffer.remainingCapacity() / marketDataRingBuffer.getBufferSize());
     }
 
     private String extractSymbol(String streamName) {
