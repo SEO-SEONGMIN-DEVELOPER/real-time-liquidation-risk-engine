@@ -1,60 +1,56 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const toggleEl = document.getElementById('toggle-enabled');
-  const priceRangeEl = document.getElementById('price-range');
-  const bucketCountEl = document.getElementById('bucket-count');
-  const overlayWidthEl = document.getElementById('overlay-width');
-  const opacityEl = document.getElementById('opacity');
-
-  chrome.storage.sync.get(['liqHeatmapEnabled', 'liqHeatmapSettings'], (result) => {
-    if (result.liqHeatmapEnabled !== undefined) {
-      toggleEl.checked = result.liqHeatmapEnabled;
-    }
-    if (result.liqHeatmapSettings) {
-      const s = result.liqHeatmapSettings;
-      if (s.priceRangePercent) priceRangeEl.value = s.priceRangePercent;
-      if (s.priceBucketCount) bucketCountEl.value = s.priceBucketCount;
-      if (s.overlayWidth) overlayWidthEl.value = s.overlayWidth;
-      if (s.opacity) opacityEl.value = s.opacity;
-    }
-    updateLabels();
+  chrome.storage.sync.get(['riskMonitorLang'], (result) => {
+    const lang = result.riskMonitorLang || 'en';
+    I18n.setLang(lang);
+    applyTranslations();
+    setActiveBtn(lang);
   });
 
-  toggleEl.addEventListener('change', () => {
-    const enabled = toggleEl.checked;
-    chrome.storage.sync.set({ liqHeatmapEnabled: enabled });
-    sendToContent({ type: 'TOGGLE_HEATMAP', enabled });
-  });
+  document.getElementById('lang-selector').addEventListener('click', (e) => {
+    const btn = e.target.closest('.lang-btn');
+    if (!btn) return;
+    const lang = btn.dataset.lang;
+    I18n.setLang(lang);
+    chrome.storage.sync.set({ riskMonitorLang: lang });
+    applyTranslations();
+    setActiveBtn(lang);
 
-  [priceRangeEl, bucketCountEl, overlayWidthEl, opacityEl].forEach((el) => {
-    el.addEventListener('input', () => {
-      updateLabels();
-      saveAndSendSettings();
-    });
-  });
-
-  function updateLabels() {
-    document.getElementById('price-range-val').textContent = priceRangeEl.value + '%';
-    document.getElementById('bucket-count-val').textContent = bucketCountEl.value;
-    document.getElementById('overlay-width-val').textContent = overlayWidthEl.value;
-    document.getElementById('opacity-val').textContent = Math.round(opacityEl.value * 100) + '%';
-  }
-
-  function saveAndSendSettings() {
-    const settings = {
-      priceRangePercent: parseInt(priceRangeEl.value),
-      priceBucketCount: parseInt(bucketCountEl.value),
-      overlayWidth: parseInt(overlayWidthEl.value),
-      opacity: parseFloat(opacityEl.value),
-    };
-    chrome.storage.sync.set({ liqHeatmapSettings: settings });
-    sendToContent({ type: 'UPDATE_SETTINGS', settings });
-  }
-
-  function sendToContent(msg) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(tabs[0].id, msg).catch(() => {});
+        chrome.tabs.sendMessage(tabs[0].id, { type: 'CHANGE_LANG', lang }).catch(() => {});
       }
     });
+  });
+
+  function setActiveBtn(lang) {
+    document.querySelectorAll('.lang-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.lang === lang);
+    });
+  }
+
+  function applyTranslations() {
+    const t = (k) => I18n.get(k);
+
+    document.getElementById('popup-title').textContent = t('popupTitle');
+    document.getElementById('popup-intro').innerHTML = t('popupIntro');
+    document.getElementById('popup-usage-title').textContent = t('popupUsageTitle');
+    document.getElementById('popup-usage-1').innerHTML = t('popupUsage1');
+    document.getElementById('popup-usage-2').innerHTML = t('popupUsage2');
+    document.getElementById('popup-usage-3').innerHTML = t('popupUsage3');
+    document.getElementById('popup-usage-4').innerHTML = t('popupUsage4');
+    document.getElementById('popup-basic-title').textContent = t('popupBasicTitle');
+    document.getElementById('popup-detail-title').textContent = t('popupDetailTitle');
+    document.getElementById('desc-risk-level').textContent = t('descRiskLevel');
+    document.getElementById('desc-reach-prob').textContent = t('descReachProb');
+    document.getElementById('desc-distance').textContent = t('descDistance');
+    document.getElementById('desc-direction').textContent = t('descDirection');
+    document.getElementById('desc-density').textContent = t('descDensity');
+    document.getElementById('desc-depth-notional').textContent = t('descDepthNotional');
+    document.getElementById('desc-levels-ratio').textContent = t('descLevelsRatio');
+    document.getElementById('desc-clusters').textContent = t('descClusters');
+    document.getElementById('desc-oi').textContent = t('descOI');
+    document.getElementById('desc-liq').textContent = t('descLiq');
+    document.getElementById('desc-imbal').textContent = t('descImbal');
+    document.getElementById('popup-footer').textContent = t('popupFooter');
   }
 });

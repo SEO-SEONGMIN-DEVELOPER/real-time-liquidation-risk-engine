@@ -11,10 +11,12 @@
   function bootstrap() {
     console.log('[RiskEngine] 확장 프로그램 로드됨');
     initRiskWidget();
+    listenForLangChange();
   }
 
   function initRiskWidget() {
-    chrome.storage?.sync?.get(['liqRiskWidgetPosition'], (result) => {
+    chrome.storage?.sync?.get(['liqRiskWidgetPosition', 'riskMonitorLang'], (result) => {
+      if (result.riskMonitorLang) I18n.setLang(result.riskMonitorLang);
       RiskWidgetRenderer.create(result.liqRiskWidgetPosition || null, {
         onRegister: (pos) => {
           registerPositionToBackend(pos);
@@ -24,6 +26,15 @@
         }
       });
       connectRiskWebSocket();
+    });
+  }
+
+  function listenForLangChange() {
+    chrome.runtime?.onMessage?.addListener((msg) => {
+      if (msg.type === 'CHANGE_LANG' && msg.lang) {
+        I18n.setLang(msg.lang);
+        RiskWidgetRenderer.applyI18n();
+      }
     });
   }
 

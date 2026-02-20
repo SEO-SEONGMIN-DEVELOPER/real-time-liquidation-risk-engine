@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Liquidation Heatmap for Binance Futures",
-  "version": "0.1.0",
-  "description": "바이낸스 선물 차트 위에 청산맵 히스토그램을 오버레이합니다.",
+  "name": "Cascade Risk Monitor for Binance Futures",
+  "version": "0.2.0",
+  "description": "바이낸스 선물 포지션의 연쇄 청산 위험을 실시간으로 분석합니다.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://*.binance.com/*",
@@ -17,6 +17,7 @@
         "https://*.binance.bh/*"
       ],
       "js": [
+        "common/i18n.js",
         "content/risk-widget-renderer.js",
         "content/stomp-client.js",
         "content/content.js"
