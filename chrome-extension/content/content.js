@@ -29,8 +29,12 @@
     markPrice: null,
   };
 
-  let riskWidgetTimer = null;
   const BACKEND_BASE_URL = 'http://localhost:8080';
+  const WS_URL = 'ws://localhost:8080/ws';
+
+  let riskSubscription = null;
+  let registeredSymbol = null;
+  let lastRegisteredKey = null;
 
   let isDragging = false;
   let dragOffsetX = 0;
@@ -319,7 +323,17 @@
       const posData = extractPositionFromDOM();
       if (posData && posData.found) {
         userPosition = { ...userPosition, ...posData };
-        console.log('[LiqHeatmap] 포지션 감지:', userPosition);
+
+        const symbol = posData.symbol || extractSymbolFromPage();
+        const liqPrice = posData.liquidationPrice;
+        if (symbol && liqPrice) {
+          registerPositionToBackend({
+            symbol: symbol,
+            liquidationPrice: liqPrice,
+            side: posData.side || 'LONG',
+            leverage: posData.leverage || 1
+          });
+        }
       }
     } catch (e) {
       console.debug('[LiqHeatmap] 포지션 스크래핑 오류:', e);
@@ -527,27 +541,73 @@
   function initRiskWidget() {
     chrome.storage?.sync?.get(['liqRiskWidgetPosition'], (result) => {
       RiskWidgetRenderer.create(result.liqRiskWidgetPosition || null);
-      startRiskWidgetLoop();
+      connectRiskWebSocket();
     });
   }
 
-  function startRiskWidgetLoop() {
-    if (riskWidgetTimer) clearInterval(riskWidgetTimer);
-    fetchAndUpdateRiskWidget();
-    riskWidgetTimer = setInterval(() => {
-      if (isEnabled) fetchAndUpdateRiskWidget();
-    }, 3000);
+  function connectRiskWebSocket() {
+    StompClient.connect(WS_URL, () => {
+      console.log('[LiqHeatmap] STOMP 연결 완료');
+      if (registeredSymbol) {
+        subscribeToSymbol(registeredSymbol);
+      }
+    }, () => {
+      console.log('[LiqHeatmap] STOMP 연결 끊김, 자동 재연결 대기...');
+    });
   }
 
-  function fetchAndUpdateRiskWidget() {
-    const currentPrice = extractCurrentPrice();
-    if (!currentPrice || currentPrice <= 0) return;
+  function subscribeToSymbol(symbol) {
+    if (riskSubscription) {
+      riskSubscription.unsubscribe();
+      riskSubscription = null;
+    }
 
-    const liqPrice = userPosition.liquidationPrice || Math.round(currentPrice * 0.95 * 100) / 100;
-    const side = userPosition.side || 'LONG';
-    const symbol = extractSymbolFromPage() || 'BTCUSDT';
+    const destination = '/topic/risk/' + symbol.toUpperCase();
+    riskSubscription = StompClient.subscribe(destination, (report) => {
+      if (report) {
+        console.log('[LiqHeatmap] Risk update via STOMP:', report.riskLevel, report.cascadeReachProbability);
+        RiskWidgetRenderer.update(report);
+      }
+    });
 
-    fetchCascadeRisk(symbol, currentPrice, liqPrice, side);
+    console.log('[LiqHeatmap] STOMP 구독 시작:', destination);
+  }
+
+  function registerPositionToBackend(pos) {
+    const regKey = `${pos.symbol}|${pos.liquidationPrice}|${pos.side}|${pos.leverage}`;
+    if (regKey === lastRegisteredKey) return;
+
+    const body = {
+      symbol: pos.symbol,
+      liquidationPrice: pos.liquidationPrice,
+      positionSide: pos.side || 'LONG',
+      leverage: pos.leverage || 1
+    };
+
+    fetch(`${BACKEND_BASE_URL}/api/position/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          lastRegisteredKey = regKey;
+          const sym = pos.symbol.toUpperCase();
+
+          if (registeredSymbol !== sym) {
+            registeredSymbol = sym;
+            if (StompClient.isConnected()) {
+              subscribeToSymbol(sym);
+            }
+          }
+
+          console.log('[LiqHeatmap] 포지션 등록 완료:', body);
+        }
+      })
+      .catch(err => {
+        console.debug('[LiqHeatmap] 포지션 등록 실패:', err.message);
+      });
   }
 
   function extractSymbolFromPage() {
@@ -558,23 +618,6 @@
     if (titleMatch) return titleMatch[0].toUpperCase();
 
     return null;
-  }
-
-  function fetchCascadeRisk(symbol, currentPrice, liqPrice, side) {
-    const url = `${BACKEND_BASE_URL}/api/risk/cascade?symbol=${symbol}&currentPrice=${currentPrice}&userLiquidationPrice=${liqPrice}&positionSide=${side}`;
-
-    fetch(url)
-      .then(res => {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      })
-      .then(report => {
-        console.log('[LiqHeatmap] Cascade risk:', report);
-        RiskWidgetRenderer.update(report);
-      })
-      .catch(err => {
-        console.debug('[LiqHeatmap] Risk API unavailable:', err.message);
-      });
   }
 
   bootstrap();
