@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @Setter
@@ -33,5 +34,21 @@ public class CascadeRiskReport {
     private int levelCount;
     private double depthRatio;
 
+    private List<LiqCluster> clustersInPath;
+    private int overlappingTierCount;
+    private BigDecimal estimatedLiqVolume;
+
     private long timestamp;
+
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class LiqCluster {
+        private int leverage;
+        private BigDecimal price;
+        private double weight;
+        private double distanceFromCurrentPercent;
+    }
 }
