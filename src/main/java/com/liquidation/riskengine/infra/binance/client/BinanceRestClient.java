@@ -2,6 +2,7 @@ package com.liquidation.riskengine.infra.binance.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.liquidation.riskengine.infra.binance.config.BinanceProperties;
+import com.liquidation.riskengine.infra.binance.dto.FundingRateResponse;
 import com.liquidation.riskengine.infra.binance.dto.OpenInterestResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,33 @@ public class BinanceRestClient {
     private final OkHttpClient okHttpClient;
     private final BinanceProperties properties;
     private final ObjectMapper objectMapper;
+
+    public Optional<FundingRateResponse> getLatestFundingRate(String symbol) {
+        String url = properties.getRestBaseUrl()
+                + "/fapi/v1/fundingRate?symbol=" + symbol.toUpperCase() + "&limit=1";
+
+        Request request = new Request.Builder().url(url).get().build();
+
+        try (Response response = okHttpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                log.warn("[Binance REST] FundingRate 요청 실패: symbol={}, code={}", symbol, response.code());
+                return Optional.empty();
+            }
+
+            ResponseBody body = response.body();
+            if (body == null) return Optional.empty();
+
+            FundingRateResponse[] arr = objectMapper.readValue(body.string(), FundingRateResponse[].class);
+            if (arr.length == 0) return Optional.empty();
+
+            log.debug("[Binance REST] FundingRate 수신: symbol={}, rate={}", symbol, arr[0].getFundingRate());
+            return Optional.of(arr[0]);
+
+        } catch (Exception e) {
+            log.error("[Binance REST] FundingRate 요청 예외: symbol={}", symbol, e);
+            return Optional.empty();
+        }
+    }
 
     public Optional<OpenInterestResponse> getOpenInterest(String symbol) {
         String url = properties.getRestBaseUrl()

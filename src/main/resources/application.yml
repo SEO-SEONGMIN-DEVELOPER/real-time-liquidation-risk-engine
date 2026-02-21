@@ -34,6 +34,14 @@ volatility:
   garch-beta: 0.90
   garch-auto-fit: false
 
+# 드리프트(mu) 추정 설정
+drift:
+  enabled: true
+  funding-weight: 0.6
+  momentum-weight: 0.4
+  max-annual-drift: 2.0
+  momentum-window: "1h"
+
 # Monte Carlo 시뮬레이션 설정
 montecarlo:
   enabled: true
@@ -160,6 +168,9 @@ binance:
 risk:
   cascade:
     throttle-ms: 2000
+
+drift:
+  momentum-window: "30m"
 
 montecarlo:
   path-count: 1000
