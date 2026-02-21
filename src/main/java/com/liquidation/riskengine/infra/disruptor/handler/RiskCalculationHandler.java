@@ -51,6 +51,7 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
 
     private final Map<String, Long> lastCalcTimeBySymbol = new ConcurrentHashMap<>();
     private final Map<String, Long> lastMcCalcTimeBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, CascadeRiskReport> latestCascadeReports = new ConcurrentHashMap<>();
 
     private Timer riskCalcTimer;
     private Timer e2eLatencyTimer;
@@ -130,6 +131,8 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
                 resultEvent.setCalcNanoTime(calcElapsed);
             });
 
+            latestCascadeReports.put(symbol.toUpperCase(), report);
+
             try {
                 cascadeCalibrationLogger.logPrediction(report);
             } catch (Exception ex) {
@@ -160,7 +163,8 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
         if (position == null || position.getLiquidationPrice() == null) return;
 
         try {
-            mcService.simulate(symbol, position.getLiquidationPrice(), position.getPositionSide())
+            CascadeRiskReport cascadeReport = latestCascadeReports.get(symbol.toUpperCase());
+            mcService.simulate(symbol, position.getLiquidationPrice(), position.getPositionSide(), cascadeReport)
                     .ifPresent(mcReport -> {
                         lastMcCalcTimeBySymbol.put(symbol, System.nanoTime());
                         mcProcessedCounter.increment();
