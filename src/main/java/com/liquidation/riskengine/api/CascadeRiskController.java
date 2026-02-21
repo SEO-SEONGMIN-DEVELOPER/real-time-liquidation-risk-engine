@@ -50,7 +50,7 @@ public class CascadeRiskController {
         OpenInterestSnapshot latestOi = fetchLatestOiSnapshot(symbol);
         List<LiquidationEvent> recentLiqs = redisTimeSeriesService.getRecentLiquidationEvents(
                 symbol, Duration.ofMinutes(30));
-        cascadeRiskCalculator.analyzeMarketPressure(report, latestOi, recentLiqs, orderBook);
+        cascadeRiskCalculator.analyzeMarketPressure(report, latestOi, recentLiqs, orderBook, positionSide);
 
         cascadeRiskCalculator.synthesize(report);
 
