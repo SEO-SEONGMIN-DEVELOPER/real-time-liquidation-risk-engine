@@ -5,6 +5,7 @@
   const WS_URL = 'ws://localhost:8080/ws';
 
   let riskSubscription = null;
+  let mcSubscription = null;
   let registeredSymbol = null;
   let lastRegisteredKey = null;
 
@@ -54,16 +55,30 @@
       riskSubscription.unsubscribe();
       riskSubscription = null;
     }
+    if (mcSubscription) {
+      mcSubscription.unsubscribe();
+      mcSubscription = null;
+    }
 
-    const destination = '/topic/risk/' + symbol.toUpperCase();
-    riskSubscription = StompClient.subscribe(destination, (report) => {
+    const sym = symbol.toUpperCase();
+
+    const riskDest = '/topic/risk/' + sym;
+    riskSubscription = StompClient.subscribe(riskDest, (report) => {
       if (report) {
         console.log('[RiskEngine] Risk update via STOMP:', report.riskLevel, report.cascadeReachProbability);
         RiskWidgetRenderer.update(report);
       }
     });
 
-    console.log('[RiskEngine] STOMP 구독 시작:', destination);
+    const mcDest = '/topic/mc/' + sym;
+    mcSubscription = StompClient.subscribe(mcDest, (mcReport) => {
+      if (mcReport) {
+        console.log('[RiskEngine] MC update via STOMP:', mcReport.riskLevel, mcReport.sigma);
+        RiskWidgetRenderer.updateMc(mcReport);
+      }
+    });
+
+    console.log('[RiskEngine] STOMP 구독 시작:', riskDest, mcDest);
   }
 
   function unregisterPosition(symbol) {
@@ -82,6 +97,10 @@
     if (riskSubscription) {
       riskSubscription.unsubscribe();
       riskSubscription = null;
+    }
+    if (mcSubscription) {
+      mcSubscription.unsubscribe();
+      mcSubscription = null;
     }
     registeredSymbol = null;
     lastRegisteredKey = null;
