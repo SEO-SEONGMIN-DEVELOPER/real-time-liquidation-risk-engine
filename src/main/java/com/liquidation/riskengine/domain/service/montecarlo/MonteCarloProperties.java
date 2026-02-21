@@ -19,7 +19,7 @@ public class MonteCarloProperties {
     private List<Integer> horizons = List.of(10, 60, 240, 1440);
     private String volatilityWindow = "1h";
     private long throttleIntervalSeconds = 60;
-    private boolean useFatTail = false;
+    private boolean useFatTail = true;
     private double degreesOfFreedom = 5.0;
 
     public int maxHorizonMinutes() {
