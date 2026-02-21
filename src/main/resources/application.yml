@@ -33,6 +33,7 @@ montecarlo:
     - 240
     - 1440
   volatility-window: "1h"
+  throttle-interval-seconds: 60
   use-fat-tail: false
   degrees-of-freedom: 5.0
 

@@ -3,10 +3,13 @@ package com.liquidation.riskengine.infra.disruptor.handler;
 import com.lmax.disruptor.EventHandler;
 import com.lmax.disruptor.RingBuffer;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport;
+import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.UserPosition;
 import com.liquidation.riskengine.domain.service.CascadeRiskCalculator;
 import com.liquidation.riskengine.domain.service.MarkPriceCache;
 import com.liquidation.riskengine.domain.service.RiskStateManager;
+import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloProperties;
+import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import com.liquidation.riskengine.infra.disruptor.event.EventType;
 import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
 import com.liquidation.riskengine.infra.disruptor.event.RiskResultEvent;
@@ -35,13 +38,17 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
     private final MarkPriceCache markPriceCache;
     private final RingBuffer<RiskResultEvent> riskResultRingBuffer;
     private final MeterRegistry meterRegistry;
+    private final MonteCarloSimulationService mcService;
+    private final MonteCarloProperties mcProperties;
 
     private final Map<String, Long> lastCalcTimeBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, Long> lastMcCalcTimeBySymbol = new ConcurrentHashMap<>();
 
     private Timer riskCalcTimer;
     private Timer e2eLatencyTimer;
     private Counter processedCounter;
     private Counter throttledCounter;
+    private Counter mcProcessedCounter;
 
     @PostConstruct
     void initMetrics() {
@@ -57,6 +64,9 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
         throttledCounter = Counter.builder("disruptor.events.throttled")
                 .description("MARK_PRICE events skipped by 200ms throttle")
                 .register(meterRegistry);
+        mcProcessedCounter = Counter.builder("disruptor.mc.processed")
+                .description("Monte Carlo simulations completed")
+                .register(meterRegistry);
     }
 
     @Override
@@ -68,11 +78,13 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
         String symbol = event.getSymbol();
         if (symbol == null) return;
 
+        long now = System.nanoTime();
+
         if (event.getType() == EventType.MARK_PRICE) {
-            long now = System.nanoTime();
             Long lastCalc = lastCalcTimeBySymbol.get(symbol);
             if (lastCalc != null && (now - lastCalc) < THROTTLE_INTERVAL_NS) {
                 throttledCounter.increment();
+                tryMonteCarlo(symbol, now);
                 return;
             }
         }
@@ -115,5 +127,48 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
         } catch (Exception e) {
             log.error("[RiskCalc] 위험 계산 실패: symbol={}", symbol, e);
         }
+
+        tryMonteCarlo(symbol, now);
+    }
+
+    private void tryMonteCarlo(String symbol, long nowNano) {
+        if (!mcProperties.isEnabled()) return;
+
+        long throttleNs = mcProperties.getThrottleIntervalSeconds() * 1_000_000_000L;
+        Long lastMc = lastMcCalcTimeBySymbol.get(symbol);
+        if (lastMc != null && (nowNano - lastMc) < throttleNs) {
+            return;
+        }
+
+        UserPosition position = riskStateManager.getPosition(symbol);
+        if (position == null || position.getLiquidationPrice() == null) return;
+
+        try {
+            mcService.simulate(symbol, position.getLiquidationPrice(), position.getPositionSide())
+                    .ifPresent(mcReport -> {
+                        lastMcCalcTimeBySymbol.put(symbol, System.nanoTime());
+                        mcProcessedCounter.increment();
+
+                        riskResultRingBuffer.publishEvent((resultEvent, seq) -> {
+                            resultEvent.clear();
+                            resultEvent.setMcReport(mcReport);
+                        });
+
+                        log.info("[MC] {} | risk={} | 24h_prob={}% | σ={:.4f} | calc={}μs",
+                                symbol, mcReport.getRiskLevel(),
+                                String.format("%.1f", get24hProbability(mcReport) * 100),
+                                mcReport.getSigma(), mcReport.getCalcDurationMicros());
+                    });
+        } catch (Exception e) {
+            log.error("[MC] 시뮬레이션 실패: symbol={}", symbol, e);
+        }
+    }
+
+    private double get24hProbability(MonteCarloReport report) {
+        return report.getHorizons().stream()
+                .filter(h -> h.getMinutes() == 1440)
+                .findFirst()
+                .map(MonteCarloReport.HorizonResult::getLiquidationProbability)
+                .orElse(0.0);
     }
 }
