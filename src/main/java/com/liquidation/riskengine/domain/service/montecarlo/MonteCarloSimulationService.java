@@ -1,5 +1,6 @@
 package com.liquidation.riskengine.domain.service.montecarlo;
 
+import com.liquidation.riskengine.domain.model.CascadeRiskReport;
 import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.VolatilitySnapshot;
 import com.liquidation.riskengine.domain.service.GarchEstimator.GarchResult;
@@ -33,6 +34,13 @@ public class MonteCarloSimulationService {
     public Optional<MonteCarloReport> simulate(String symbol,
                                                BigDecimal liquidationPrice,
                                                String positionSide) {
+        return simulate(symbol, liquidationPrice, positionSide, null);
+    }
+
+    public Optional<MonteCarloReport> simulate(String symbol,
+                                               BigDecimal liquidationPrice,
+                                               String positionSide,
+                                               CascadeRiskReport cascadeReport) {
         if (!properties.isEnabled()) {
             log.debug("[MC] 비활성 상태, 시뮬레이션 스킵: symbol={}", symbol);
             return Optional.empty();
@@ -61,6 +69,22 @@ public class MonteCarloSimulationService {
         }
 
         double mu = driftEstimator.estimate(symbol);
+
+        if (cascadeReport != null) {
+            double muCascade = calcCascadeDrift(cascadeReport);
+            sigma = applyCascadeSigmaBoost(sigma, cascadeReport);
+            if (sigmaSchedule != null) {
+                double boost = calcSigmaMultiplier(cascadeReport);
+                for (int i = 0; i < sigmaSchedule.length; i++) {
+                    sigmaSchedule[i] *= boost;
+                }
+            }
+            mu += muCascade;
+            double cap = 2.0;
+            mu = Math.max(-cap, Math.min(cap, mu));
+            log.debug("[MC] Cascade 통합: muCascade={:.4f}, totalMu={:.4f}, σ_boosted={:.4f}",
+                    muCascade, mu, sigma);
+        }
 
         double nu = properties.getDegreesOfFreedom();
         if (properties.isUseFatTail()) {
@@ -91,13 +115,29 @@ public class MonteCarloSimulationService {
                 properties.horizonsArray());
 
         long totalMicros = (System.nanoTime() - startNano) / 1_000;
-        log.info("[MC] 시뮬레이션 완료: symbol={}, side={}, σ={:.4f}, μ={:.4f}, ν={:.1f}, risk={}, paths={}, total={}μs",
-                symbol, positionSide, sigma, mu, nu, report.getRiskLevel(),
-                properties.getPathCount(), totalMicros);
+        log.info("[MC] 시뮬레이션 완료: symbol={}, side={}, σ={:.4f}, μ={:.4f}, ν={:.1f}, cascade={}, risk={}, paths={}, total={}μs",
+                symbol, positionSide, sigma, mu, nu, cascadeReport != null,
+                report.getRiskLevel(), properties.getPathCount(), totalMicros);
 
         latestReports.put(symbol.toUpperCase(), report);
 
         return Optional.of(report);
+    }
+
+    private double calcCascadeDrift(CascadeRiskReport cascade) {
+        double pressureNorm = cascade.getMarketPressureTotal() / 60.0;
+        double sign = "LONG".equalsIgnoreCase(cascade.getPositionSide()) ? -1.0 : 1.0;
+        double scaleFactor = 0.5;
+        return sign * pressureNorm * scaleFactor;
+    }
+
+    private double applyCascadeSigmaBoost(double sigma, CascadeRiskReport cascade) {
+        return sigma * calcSigmaMultiplier(cascade);
+    }
+
+    private double calcSigmaMultiplier(CascadeRiskReport cascade) {
+        double pressureNorm = cascade.getMarketPressureTotal() / 60.0;
+        return 1.0 + pressureNorm * 0.3;
     }
 
     public Optional<MonteCarloReport> getLatest(String symbol) {

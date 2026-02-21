@@ -5,10 +5,12 @@ import com.liquidation.riskengine.domain.model.CascadeRiskReport.DensityLevel;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport.LiqCluster;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport.RiskLevel;
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
+import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot.PriceLevel;
 import com.liquidation.riskengine.domain.service.LiquidationPriceCalculator.EstimatedLiquidation;
+import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ public class CascadeRiskCalculator {
 
     private final LiquidationPriceCalculator liquidationPriceCalculator;
     private final CascadeRiskProperties cascadeProps;
+    private final MonteCarloSimulationService mcService;
 
     private static final MathContext MC = new MathContext(8, RoundingMode.HALF_UP);
     private static final Duration RECENT_LIQ_WINDOW = Duration.ofMinutes(30);
@@ -326,23 +329,58 @@ public class CascadeRiskCalculator {
         double reachProb = densityScore * syn.getDensityWeight() + marketPressureNorm * syn.getPressureWeight();
         reachProb = Math.max(0, Math.min(100, reachProb));
 
+        double mcBlend = 0.0;
+        MonteCarloReport mcReport = mcService.getLatest(report.getSymbol()).orElse(null);
+        if (mcReport != null) {
+            double mcProb1h = getMcProbabilityForHorizon(mcReport, 60);
+            mcBlend = mcProb1h * 100;
+            reachProb = reachProb * 0.7 + mcBlend * 0.3;
+            reachProb = Math.max(0, Math.min(100, reachProb));
+        }
+
         RiskLevel computed = RiskLevel.fromScore(reachProb);
         RiskLevel minLevel = distanceFloor(report.getDistancePercent());
         RiskLevel riskLevel = computed.ordinal() >= minLevel.ordinal() ? computed : minLevel;
+
+        if (mcReport != null) {
+            RiskLevel mcLevel = toRiskLevel(mcReport.getRiskLevel());
+            if (mcLevel.ordinal() > riskLevel.ordinal()) {
+                riskLevel = mcLevel;
+            }
+        }
 
         report.setDensityScore(Math.round(densityScore * 10.0) / 10.0);
         report.setDensityLevel(densityLevel);
         report.setCascadeReachProbability(Math.round(reachProb * 10.0) / 10.0);
         report.setRiskLevel(riskLevel);
 
-        log.info("{} | densityScore={} ({}) | marketPressure={}/60 | reachProb={}% | riskLevel={} (floor={})",
+        log.info("{} | densityScore={} ({}) | pressure={}/60 | mcBlend={} | reachProb={}% | riskLevel={} (floor={})",
                 report.getSymbol(),
                 String.format("%.1f", densityScore), densityLevel,
                 report.getMarketPressureTotal(),
+                mcReport != null ? String.format("%.1f%%", mcBlend) : "N/A",
                 String.format("%.1f", reachProb),
                 riskLevel, minLevel);
 
         return report;
+    }
+
+    private double getMcProbabilityForHorizon(MonteCarloReport mc, int minutes) {
+        if (mc.getHorizons() == null) return 0.0;
+        return mc.getHorizons().stream()
+                .filter(h -> h.getMinutes() == minutes)
+                .findFirst()
+                .map(MonteCarloReport.HorizonResult::getLiquidationProbability)
+                .orElse(0.0);
+    }
+
+    private RiskLevel toRiskLevel(MonteCarloReport.McRiskLevel mcLevel) {
+        return switch (mcLevel) {
+            case CRITICAL -> RiskLevel.CRITICAL;
+            case HIGH -> RiskLevel.HIGH;
+            case MEDIUM -> RiskLevel.MEDIUM;
+            case LOW -> RiskLevel.LOW;
+        };
     }
 
     private RiskLevel distanceFloor(double distPct) {
