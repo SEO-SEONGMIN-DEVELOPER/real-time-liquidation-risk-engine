@@ -5,8 +5,8 @@
 }
 
 body {
-  width: 320px;
-  max-height: 520px;
+  width: 340px;
+  max-height: 580px;
   overflow-y: auto;
   background: #181A20;
   color: #EAECEF;
@@ -100,6 +100,16 @@ h2 {
   gap: 6px;
 }
 
+h3 {
+  font-size: 11px;
+  font-weight: 700;
+  color: #848E9C;
+  margin: 10px 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .badge {
   font-size: 9px;
   font-weight: 600;
@@ -109,6 +119,54 @@ h2 {
   border-radius: 2px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+}
+
+.model-section {
+  padding: 0;
+}
+
+.model-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.model-header h2 {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.model-icon {
+  font-size: 13px;
+  color: #F0B90B;
+}
+
+.model-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.model-badge.future {
+  color: #1E9CF4;
+  background: rgba(30, 156, 244, 0.15);
+}
+
+.model-badge.current {
+  color: #F0B90B;
+  background: rgba(240, 185, 11, 0.15);
+}
+
+.model-desc {
+  font-size: 11px;
+  color: #848E9C;
+  line-height: 1.6;
+  margin-bottom: 10px;
 }
 
 .usage-list {

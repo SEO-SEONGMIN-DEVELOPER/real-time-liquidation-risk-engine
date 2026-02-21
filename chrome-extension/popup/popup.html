@@ -30,59 +30,95 @@
 
     <div class="divider"></div>
 
-    <h2 id="popup-basic-title"></h2>
-    <dl class="metric-list">
-      <div class="metric-item">
-        <dt><span class="dot critical"></span>Risk Level</dt>
-        <dd id="desc-risk-level"></dd>
+    <div class="model-section">
+      <div class="model-header mc">
+        <span class="model-icon">&#9881;</span>
+        <h2 id="popup-mc-title"></h2>
+        <span class="model-badge future">Future</span>
       </div>
-      <div class="metric-item">
-        <dt>Reach Prob.</dt>
-        <dd id="desc-reach-prob"></dd>
-      </div>
-      <div class="metric-item">
-        <dt>Distance</dt>
-        <dd id="desc-distance"></dd>
-      </div>
-      <div class="metric-item">
-        <dt>Direction</dt>
-        <dd id="desc-direction"></dd>
-      </div>
-    </dl>
+      <p class="model-desc" id="popup-mc-desc"></p>
+      <dl class="metric-list">
+        <div class="metric-item">
+          <dt id="label-mc-risk"><span class="dot high"></span></dt>
+          <dd id="desc-mc-risk"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-horizon"></dt>
+          <dd id="desc-mc-horizon"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-sigma"></dt>
+          <dd id="desc-mc-sigma"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-paths"></dt>
+          <dd id="desc-mc-paths"></dd>
+        </div>
+      </dl>
+    </div>
 
     <div class="divider"></div>
 
-    <h2><span id="popup-detail-title"></span> <span class="badge">Details</span></h2>
-    <dl class="metric-list">
-      <div class="metric-item">
-        <dt>Density Score</dt>
-        <dd id="desc-density"></dd>
+    <div class="model-section">
+      <div class="model-header cascade">
+        <span class="model-icon">&#9878;</span>
+        <h2 id="popup-cascade-title"></h2>
+        <span class="model-badge current">Current</span>
       </div>
-      <div class="metric-item">
-        <dt>Depth / Notional</dt>
-        <dd id="desc-depth-notional"></dd>
-      </div>
-      <div class="metric-item">
-        <dt>Levels / Ratio</dt>
-        <dd id="desc-levels-ratio"></dd>
-      </div>
-      <div class="metric-item">
-        <dt>Liq. Clusters</dt>
-        <dd id="desc-clusters"></dd>
-      </div>
-      <div class="metric-item">
-        <dt>OI Pressure</dt>
-        <dd id="desc-oi"></dd>
-      </div>
-      <div class="metric-item">
-        <dt>Liq Intensity</dt>
-        <dd id="desc-liq"></dd>
-      </div>
-      <div class="metric-item">
-        <dt>Imbalance</dt>
-        <dd id="desc-imbal"></dd>
-      </div>
-    </dl>
+      <p class="model-desc" id="popup-cascade-desc"></p>
+
+      <h3 id="popup-basic-title"></h3>
+      <dl class="metric-list">
+        <div class="metric-item">
+          <dt id="label-risk-level"><span class="dot critical"></span></dt>
+          <dd id="desc-risk-level"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-reach-prob"></dt>
+          <dd id="desc-reach-prob"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-distance"></dt>
+          <dd id="desc-distance"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-direction"></dt>
+          <dd id="desc-direction"></dd>
+        </div>
+      </dl>
+
+      <h3><span id="popup-detail-title"></span> <span class="badge">Details</span></h3>
+      <dl class="metric-list">
+        <div class="metric-item">
+          <dt id="label-density"></dt>
+          <dd id="desc-density"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-depth-notional"></dt>
+          <dd id="desc-depth-notional"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-levels-ratio"></dt>
+          <dd id="desc-levels-ratio"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-clusters"></dt>
+          <dd id="desc-clusters"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-oi"></dt>
+          <dd id="desc-oi"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-liq"></dt>
+          <dd id="desc-liq"></dd>
+        </div>
+        <div class="metric-item">
+          <dt id="label-imbal"></dt>
+          <dd id="desc-imbal"></dd>
+        </div>
+      </dl>
+    </div>
 
     <div class="divider"></div>
 
