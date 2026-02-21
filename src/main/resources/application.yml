@@ -22,6 +22,11 @@ binance:
   max-reconnect-attempts: 0
   open-interest-poll-interval-ms: 3000
 
+# Cascade Risk 스로틀 설정
+risk:
+  cascade:
+    throttle-ms: 200
+
 # Monte Carlo 시뮬레이션 설정
 montecarlo:
   enabled: true
@@ -131,6 +136,34 @@ management:
   endpoint:
     health:
       show-details: always
+
+---
+# Local Test Profile
+spring:
+  config:
+    activate:
+      on-profile: light
+
+binance:
+  symbols:
+    - btcusdt
+  mark-price-speed: 3000
+  open-interest-poll-interval-ms: 15000
+
+risk:
+  cascade:
+    throttle-ms: 2000
+
+montecarlo:
+  path-count: 1000
+  time-step-minutes: 5
+  throttle-interval-seconds: 180
+
+logging:
+  level:
+    com.liquidation.riskengine: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
 
 ---
 # Production Profile

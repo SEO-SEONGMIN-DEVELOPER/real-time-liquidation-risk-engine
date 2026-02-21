@@ -19,6 +19,7 @@ import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -31,8 +32,6 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
 
-    private static final long THROTTLE_INTERVAL_NS = 200_000_000L;
-
     private final CascadeRiskCalculator cascadeRiskCalculator;
     private final RiskStateManager riskStateManager;
     private final MarkPriceCache markPriceCache;
@@ -40,6 +39,11 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
     private final MeterRegistry meterRegistry;
     private final MonteCarloSimulationService mcService;
     private final MonteCarloProperties mcProperties;
+
+    @Value("${risk.cascade.throttle-ms:200}")
+    private long cascadeThrottleMs;
+
+    private long throttleIntervalNs;
 
     private final Map<String, Long> lastCalcTimeBySymbol = new ConcurrentHashMap<>();
     private final Map<String, Long> lastMcCalcTimeBySymbol = new ConcurrentHashMap<>();
@@ -52,6 +56,8 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
 
     @PostConstruct
     void initMetrics() {
+        throttleIntervalNs = cascadeThrottleMs * 1_000_000L;
+        log.info("[RiskCalc] Cascade 스로틀 간격: {}ms", cascadeThrottleMs);
         riskCalcTimer = Timer.builder("disruptor.risk.calc_duration")
                 .description("5-stage risk calculation duration")
                 .register(meterRegistry);
@@ -82,7 +88,7 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
 
         if (event.getType() == EventType.MARK_PRICE) {
             Long lastCalc = lastCalcTimeBySymbol.get(symbol);
-            if (lastCalc != null && (now - lastCalc) < THROTTLE_INTERVAL_NS) {
+            if (lastCalc != null && (now - lastCalc) < throttleIntervalNs) {
                 throttledCounter.increment();
                 tryMonteCarlo(symbol, now);
                 return;

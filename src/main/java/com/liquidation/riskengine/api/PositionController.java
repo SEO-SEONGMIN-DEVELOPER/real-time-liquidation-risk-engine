@@ -2,9 +2,11 @@ package com.liquidation.riskengine.api;
 
 import com.liquidation.riskengine.domain.model.UserPosition;
 import com.liquidation.riskengine.domain.service.RiskStateManager;
+import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @RestController
@@ -25,6 +28,8 @@ import java.util.Map;
 public class PositionController {
 
     private final RiskStateManager riskStateManager;
+    private final MonteCarloSimulationService mcService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody UserPosition position) {
@@ -41,13 +46,27 @@ public class PositionController {
 
         riskStateManager.registerPosition(position);
 
+        String symbol = position.getSymbol().toUpperCase();
         log.info("[Position API] 포지션 등록 요청: symbol={}, liqPrice={}, side={}, leverage={}x",
-                position.getSymbol(), position.getLiquidationPrice(),
+                symbol, position.getLiquidationPrice(),
                 position.getPositionSide(), position.getLeverage());
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                mcService.simulate(symbol, position.getLiquidationPrice(), position.getPositionSide())
+                        .ifPresent(mcReport -> {
+                            String dest = "/topic/mc/" + symbol;
+                            messagingTemplate.convertAndSend(dest, mcReport);
+                            log.info("[Position API] 즉시 MC 완료: symbol={}, risk={}", symbol, mcReport.getRiskLevel());
+                        });
+            } catch (Exception e) {
+                log.warn("[Position API] 즉시 MC 실패: symbol={}", symbol, e);
+            }
+        });
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
-                "symbol", position.getSymbol().toUpperCase(),
+                "symbol", symbol,
                 "message", "포지션이 등록되었습니다. 해당 심볼의 실시간 위험 계산이 시작됩니다."));
     }
 
