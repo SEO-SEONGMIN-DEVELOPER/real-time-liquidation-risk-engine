@@ -9,7 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -21,6 +23,8 @@ public class MonteCarloSimulationService {
     private final PricePathGenerator pricePathGenerator;
     private final LiquidationDetector liquidationDetector;
     private final MonteCarloProperties properties;
+
+    private final Map<String, MonteCarloReport> latestReports = new ConcurrentHashMap<>();
 
     public Optional<MonteCarloReport> simulate(String symbol,
                                                BigDecimal liquidationPrice,
@@ -67,6 +71,13 @@ public class MonteCarloSimulationService {
                 symbol, positionSide, sigma, report.getRiskLevel(),
                 properties.getPathCount(), totalMicros);
 
+        latestReports.put(symbol.toUpperCase(), report);
+
         return Optional.of(report);
+    }
+
+    public Optional<MonteCarloReport> getLatest(String symbol) {
+        if (symbol == null) return Optional.empty();
+        return Optional.ofNullable(latestReports.get(symbol.toUpperCase()));
     }
 }
