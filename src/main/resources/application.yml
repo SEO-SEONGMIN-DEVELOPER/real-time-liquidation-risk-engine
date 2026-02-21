@@ -22,6 +22,20 @@ binance:
   max-reconnect-attempts: 0
   open-interest-poll-interval-ms: 3000
 
+# Monte Carlo 시뮬레이션 설정
+montecarlo:
+  enabled: true
+  path-count: 10000
+  time-step-minutes: 1
+  horizons:
+    - 10
+    - 60
+    - 240
+    - 1440
+  volatility-window: "1h"
+  use-fat-tail: false
+  degrees-of-freedom: 5.0
+
 ---
 # Local Profile
 spring:
