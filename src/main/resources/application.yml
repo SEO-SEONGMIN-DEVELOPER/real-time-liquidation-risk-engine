@@ -27,6 +27,13 @@ risk:
   cascade:
     throttle-ms: 200
 
+# 변동성 추정 설정
+volatility:
+  model: garch
+  garch-alpha: 0.05
+  garch-beta: 0.90
+  garch-auto-fit: false
+
 # Monte Carlo 시뮬레이션 설정
 montecarlo:
   enabled: true

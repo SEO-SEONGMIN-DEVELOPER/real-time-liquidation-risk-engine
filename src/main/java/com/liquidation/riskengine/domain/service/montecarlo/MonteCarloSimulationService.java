@@ -2,6 +2,7 @@ package com.liquidation.riskengine.domain.service.montecarlo;
 
 import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.VolatilitySnapshot;
+import com.liquidation.riskengine.domain.service.GarchEstimator.GarchResult;
 import com.liquidation.riskengine.domain.service.MarkPriceCache;
 import com.liquidation.riskengine.domain.service.VolatilityEstimator;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,6 +47,17 @@ public class MonteCarloSimulationService {
         VolatilitySnapshot volSnap = volatilityEstimator.estimate(symbol);
         double sigma = volSnap.getSigmaForLabel(properties.getVolatilityWindow());
 
+        int totalSteps = properties.maxHorizonMinutes() / properties.getTimeStepMinutes();
+        double[] sigmaSchedule = null;
+
+        Duration volWindow = parseVolatilityWindow(properties.getVolatilityWindow());
+        GarchResult garchResult = volatilityEstimator.estimateGarch(symbol, volWindow);
+        if (garchResult != null) {
+            sigmaSchedule = garchResult.forecastSigmaScheduleAnnualized(totalSteps);
+            sigma = garchResult.getAnnualizedSigma();
+            log.debug("[MC] GARCH σ schedule 적용: symbol={}, σ_0={:.4f}, steps={}", symbol, sigma, totalSteps);
+        }
+
         SimulationRequest request = SimulationRequest.builder()
                 .startPrice(currentPrice.doubleValue())
                 .sigma(sigma)
@@ -53,6 +66,7 @@ public class MonteCarloSimulationService {
                 .horizonMinutes(properties.maxHorizonMinutes())
                 .useFatTail(properties.isUseFatTail())
                 .degreesOfFreedom(properties.getDegreesOfFreedom())
+                .sigmaSchedule(sigmaSchedule)
                 .build();
 
         double[][] paths = pricePathGenerator.generate(request);
@@ -79,5 +93,16 @@ public class MonteCarloSimulationService {
     public Optional<MonteCarloReport> getLatest(String symbol) {
         if (symbol == null) return Optional.empty();
         return Optional.ofNullable(latestReports.get(symbol.toUpperCase()));
+    }
+
+    private Duration parseVolatilityWindow(String label) {
+        if (label == null) return Duration.ofHours(1);
+        return switch (label) {
+            case "1m" -> Duration.ofMinutes(1);
+            case "5m" -> Duration.ofMinutes(5);
+            case "1h" -> Duration.ofHours(1);
+            case "24h" -> Duration.ofHours(24);
+            default -> Duration.ofHours(1);
+        };
     }
 }

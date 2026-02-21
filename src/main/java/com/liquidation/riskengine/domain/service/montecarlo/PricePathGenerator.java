@@ -22,29 +22,65 @@ public class PricePathGenerator {
         int totalSteps = request.getHorizonMinutes() / stepMinutes;
         boolean fatTail = request.isUseFatTail();
         double nu = request.getDegreesOfFreedom();
+        double[] sigmaSchedule = request.getSigmaSchedule();
 
         double dt = stepMinutes / MINUTES_PER_YEAR;
-        double drift = (mu - 0.5 * sigma * sigma) * dt;
-        double diffusion = sigma * Math.sqrt(dt);
+        double sqrtDt = Math.sqrt(dt);
+
+        boolean useSchedule = sigmaSchedule != null && sigmaSchedule.length >= totalSteps;
+
+        double[] driftPerStep;
+        double[] diffPerStep;
+        if (useSchedule) {
+            driftPerStep = new double[totalSteps];
+            diffPerStep = new double[totalSteps];
+            for (int t = 0; t < totalSteps; t++) {
+                double st = sigmaSchedule[t];
+                driftPerStep[t] = (mu - 0.5 * st * st) * dt;
+                diffPerStep[t] = st * sqrtDt;
+            }
+        } else {
+            double constDrift = (mu - 0.5 * sigma * sigma) * dt;
+            double constDiff = sigma * sqrtDt;
+            driftPerStep = null;
+            diffPerStep = null;
+            var cd = constDrift;
+            var cf = constDiff;
+
+            double[][] paths = new double[pathCount][totalSteps + 1];
+            SplittableRandom rng = new SplittableRandom();
+            long startNano = System.nanoTime();
+
+            for (int i = 0; i < pathCount; i++) {
+                paths[i][0] = s0;
+                for (int t = 1; t <= totalSteps; t++) {
+                    double z = rng.nextGaussian();
+                    if (fatTail) z = applyStudentT(z, nu, rng);
+                    paths[i][t] = paths[i][t - 1] * Math.exp(cd + cf * z);
+                }
+            }
+
+            long elapsedMs = (System.nanoTime() - startNano) / 1_000_000;
+            log.debug("[PricePath] 생성 완료: paths={}, steps={}, sigma={:.4f}, fatTail={}, elapsed={}ms",
+                    pathCount, totalSteps, sigma, fatTail, elapsedMs);
+            return paths;
+        }
 
         double[][] paths = new double[pathCount][totalSteps + 1];
         SplittableRandom rng = new SplittableRandom();
-
         long startNano = System.nanoTime();
 
         for (int i = 0; i < pathCount; i++) {
             paths[i][0] = s0;
             for (int t = 1; t <= totalSteps; t++) {
                 double z = rng.nextGaussian();
-                if (fatTail) {
-                    z = applyStudentT(z, nu, rng);
-                }
-                paths[i][t] = paths[i][t - 1] * Math.exp(drift + diffusion * z);
+                if (fatTail) z = applyStudentT(z, nu, rng);
+                paths[i][t] = paths[i][t - 1] * Math.exp(driftPerStep[t - 1] + diffPerStep[t - 1] * z);
             }
         }
 
         long elapsedMs = (System.nanoTime() - startNano) / 1_000_000;
-        log.debug("[PricePath] 생성 완료: paths={}, steps={}, sigma={:.4f}, fatTail={}, elapsed={}ms",
+        log.debug("[PricePath] 생성 완료: paths={}, steps={}, sigma={:.4f}, mode=GARCH, fatTail={}, elapsed={}ms",
                 pathCount, totalSteps, sigma, fatTail, elapsedMs);
 
         return paths;
