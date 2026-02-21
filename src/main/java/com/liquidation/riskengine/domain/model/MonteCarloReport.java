@@ -45,6 +45,7 @@ public class MonteCarloReport {
     public static class HorizonResult {
         private int minutes;
         private double liquidationProbability;
+        private double calibratedProbability;
         private double pricePercentile5;
         private double pricePercentile25;
         private double priceMedian;

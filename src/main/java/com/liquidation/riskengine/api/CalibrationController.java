@@ -2,6 +2,7 @@ package com.liquidation.riskengine.api;
 
 import com.liquidation.riskengine.domain.repository.CascadePredictionRepository;
 import com.liquidation.riskengine.domain.repository.McPredictionRepository;
+import com.liquidation.riskengine.domain.service.calibration.CalibrationCorrector;
 import com.liquidation.riskengine.domain.service.cascade.CascadeCalibrationMetrics;
 import com.liquidation.riskengine.domain.service.montecarlo.McCalibrationMetrics;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class CalibrationController {
     private final McPredictionRepository mcRepository;
     private final CascadeCalibrationMetrics cascadeMetrics;
     private final CascadePredictionRepository cascadeRepository;
+    private final CalibrationCorrector calibrationCorrector;
 
     @GetMapping("/mc/report")
     public ResponseEntity<McCalibrationMetrics.CalibrationReport> getMcReport(
@@ -62,6 +64,17 @@ public class CalibrationController {
             @RequestParam(required = false) Integer horizon) {
         String sym = symbol != null ? symbol.toUpperCase() : null;
         return ResponseEntity.ok(mcMetrics.calculate(sym, horizon));
+    }
+
+    @GetMapping("/status")
+    public ResponseEntity<CalibrationCorrector.CalibrationStatus> getCalibrationStatus() {
+        return ResponseEntity.ok(calibrationCorrector.getStatus());
+    }
+
+    @PostMapping("/refit")
+    public ResponseEntity<CalibrationCorrector.CalibrationStatus> triggerRefit() {
+        calibrationCorrector.dailyFit();
+        return ResponseEntity.ok(calibrationCorrector.getStatus());
     }
 
     @GetMapping("/stats")

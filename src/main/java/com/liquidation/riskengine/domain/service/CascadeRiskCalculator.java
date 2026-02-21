@@ -10,6 +10,7 @@ import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot.PriceLevel;
 import com.liquidation.riskengine.domain.service.LiquidationPriceCalculator.EstimatedLiquidation;
+import com.liquidation.riskengine.domain.service.calibration.CalibrationCorrector;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ public class CascadeRiskCalculator {
     private final LiquidationPriceCalculator liquidationPriceCalculator;
     private final CascadeRiskProperties cascadeProps;
     private final MonteCarloSimulationService mcService;
+    private final CalibrationCorrector calibrationCorrector;
 
     private static final MathContext MC = new MathContext(8, RoundingMode.HALF_UP);
     private static final Duration RECENT_LIQ_WINDOW = Duration.ofMinutes(30);
@@ -349,9 +351,13 @@ public class CascadeRiskCalculator {
             }
         }
 
+        double calibratedReach = calibrationCorrector.correctCascade(reachProb / 100.0) * 100.0;
+        calibratedReach = Math.max(0, Math.min(100, calibratedReach));
+
         report.setDensityScore(Math.round(densityScore * 10.0) / 10.0);
         report.setDensityLevel(densityLevel);
         report.setCascadeReachProbability(Math.round(reachProb * 10.0) / 10.0);
+        report.setCalibratedReachProbability(Math.round(calibratedReach * 10.0) / 10.0);
         report.setRiskLevel(riskLevel);
 
         log.info("{} | densityScore={} ({}) | pressure={}/60 | mcBlend={} | reachProb={}% | riskLevel={} (floor={})",
