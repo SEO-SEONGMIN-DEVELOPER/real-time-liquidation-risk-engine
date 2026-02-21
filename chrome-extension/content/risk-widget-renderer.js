@@ -306,7 +306,9 @@ const RiskWidgetRenderer = (() => {
     badge.style.borderColor = riskColor.text;
 
     const reachEl = widget.querySelector('#rw-reach-prob');
-    reachEl.textContent = fmtPct(report.cascadeReachProbability);
+    const displayReach = report.calibratedReachProbability !== undefined && report.calibratedReachProbability !== null
+        ? report.calibratedReachProbability : report.cascadeReachProbability;
+    reachEl.textContent = fmtPct(displayReach);
     reachEl.style.color = riskColor.text;
 
     const densityVal = widget.querySelector('#rw-density-val');
@@ -600,7 +602,9 @@ const RiskWidgetRenderer = (() => {
     const horizonsEl = widget.querySelector('#rw-mc-horizons');
     if (horizonsEl && mcReport.horizons) {
       horizonsEl.innerHTML = mcReport.horizons.map(h => {
-        const prob = h.liquidationProbability || 0;
+        const rawProb = h.liquidationProbability || 0;
+        const calProb = h.calibratedProbability !== undefined ? h.calibratedProbability : rawProb;
+        const prob = calProb;
         const pct = (prob * 100).toFixed(1);
         const barWidth = Math.max(1, Math.min(100, prob * 100));
         const color = getMcProbColor(prob);
