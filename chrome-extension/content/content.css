@@ -160,6 +160,7 @@
   font-size: 12px;
   font-weight: 600;
   color: #EAECEF;
+  white-space: nowrap;
 }
 
 #liq-risk-widget .rw-close {
@@ -486,8 +487,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 36px;
-  padding: 0 12px;
+  min-height: 36px;
+  padding: 6px 12px;
   background: #1E2329;
   cursor: grab;
   user-select: none;
@@ -501,6 +502,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+  padding-left: 12px;
+  flex-shrink: 0;
 }
 
 #liq-risk-widget .rw-stop-btn {
