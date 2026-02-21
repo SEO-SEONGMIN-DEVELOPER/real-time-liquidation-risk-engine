@@ -13,15 +13,29 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class MonteCarloResult {
+public class MonteCarloReport {
 
     private String symbol;
-    private String positionSide;
     private double currentPrice;
     private double liquidationPrice;
+    private String positionSide;
+    private double sigma;
     private int pathCount;
     private List<HorizonResult> horizons;
+    private McRiskLevel riskLevel;
     private long timestamp;
+    private long calcDurationMicros;
+
+    public enum McRiskLevel {
+        LOW, MEDIUM, HIGH, CRITICAL;
+
+        public static McRiskLevel fromProbability(double probability) {
+            if (probability >= 0.50) return CRITICAL;
+            if (probability >= 0.25) return HIGH;
+            if (probability >= 0.10) return MEDIUM;
+            return LOW;
+        }
+    }
 
     @Getter
     @Builder
@@ -29,14 +43,12 @@ public class MonteCarloResult {
     @AllArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class HorizonResult {
-        private String label;
         private int minutes;
         private double liquidationProbability;
-        private int liquidatedPaths;
-        private double pct5;
-        private double pct25;
-        private double pct50;
-        private double pct75;
-        private double pct95;
+        private double pricePercentile5;
+        private double pricePercentile25;
+        private double priceMedian;
+        private double pricePercentile75;
+        private double pricePercentile95;
     }
 }
