@@ -1,6 +1,7 @@
 package com.liquidation.riskengine.infra.binance.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.liquidation.riskengine.domain.service.MarkPriceCache;
 import com.liquidation.riskengine.infra.binance.dto.MarkPriceEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 public class MarkPriceMessageHandler implements BinanceMessageHandler {
 
     private final ObjectMapper objectMapper;
+    private final MarkPriceCache markPriceCache;
 
     @Override
     public boolean supports(String streamName) {
@@ -22,7 +24,10 @@ public class MarkPriceMessageHandler implements BinanceMessageHandler {
     public void handle(String rawJson) {
         try {
             MarkPriceEvent event = objectMapper.readValue(rawJson, MarkPriceEvent.class);
-            log.info("[MarkPrice] symbol={}, markPrice={}, indexPrice={}, fundingRate={}",
+
+            markPriceCache.update(event.getSymbol(), event.getMarkPrice());
+
+            log.debug("[MarkPrice] symbol={}, markPrice={}, indexPrice={}, fundingRate={}",
                     event.getSymbol(),
                     event.getMarkPrice(),
                     event.getIndexPrice(),

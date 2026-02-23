@@ -116,14 +116,14 @@ public class CascadeRiskCalculator {
         return report;
     }
 
-    public CascadeRiskReport mapLiquidationClusters(CascadeRiskReport report) {
+    public CascadeRiskReport mapLiquidationClusters(CascadeRiskReport report, BigDecimal totalOi) {
         BigDecimal low = report.getPriceRangeLow();
         BigDecimal high = report.getPriceRangeHigh();
         BigDecimal currentPrice = report.getCurrentPrice();
         boolean isLong = "LONG".equalsIgnoreCase(report.getPositionSide());
 
         List<EstimatedLiquidation> distribution =
-                liquidationPriceCalculator.estimateDistribution(currentPrice, report.getSymbol());
+                liquidationPriceCalculator.estimateDistribution(currentPrice, report.getSymbol(), totalOi);
 
         List<LiqCluster> clustersInPath = new ArrayList<>();
         BigDecimal estimatedLiqVolume = BigDecimal.ZERO;
@@ -142,11 +142,13 @@ public class CascadeRiskCalculator {
                         .leverage(est.leverage())
                         .price(liqPrice)
                         .weight(est.weight())
+                        .estimatedVolume(est.estimatedVolume())
+                        .estimatedNotional(est.estimatedNotional())
                         .distanceFromCurrentPercent(distFromCurrent)
                         .build());
 
                 estimatedLiqVolume = estimatedLiqVolume.add(
-                        BigDecimal.valueOf(est.weight()), MC);
+                        est.estimatedVolume() != null ? est.estimatedVolume() : BigDecimal.ZERO, MC);
             }
         }
 
@@ -154,12 +156,14 @@ public class CascadeRiskCalculator {
         report.setOverlappingTierCount(clustersInPath.size());
         report.setEstimatedLiqVolume(estimatedLiqVolume.setScale(4, RoundingMode.HALF_UP));
 
-        log.info("{} | 구간 내 청산 클러스터 {}개 | 총 가중치={} | 클러스터: {}",
+        log.info("{} | 구간 내 청산 클러스터 {}개 | 추정 물량={} BTC | 클러스터: {}",
                 report.getSymbol(),
                 clustersInPath.size(),
                 estimatedLiqVolume.setScale(4, RoundingMode.HALF_UP).toPlainString(),
                 clustersInPath.stream()
-                        .map(c -> String.format("%dx(%.2f%%, w=%.2f)", c.getLeverage(), c.getDistanceFromCurrentPercent(), c.getWeight()))
+                        .map(c -> String.format("%dx(%.2f%%, vol=%s)",
+                                c.getLeverage(), c.getDistanceFromCurrentPercent(),
+                                c.getEstimatedVolume() != null ? c.getEstimatedVolume().toPlainString() : "N/A"))
                         .toList());
 
         return report;

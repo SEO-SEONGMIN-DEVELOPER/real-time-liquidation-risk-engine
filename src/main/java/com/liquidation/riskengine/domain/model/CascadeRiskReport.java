@@ -49,6 +49,8 @@ public class CascadeRiskReport {
         private int leverage;
         private BigDecimal price;
         private double weight;
+        private BigDecimal estimatedVolume;
+        private BigDecimal estimatedNotional;
         private double distanceFromCurrentPercent;
     }
 }

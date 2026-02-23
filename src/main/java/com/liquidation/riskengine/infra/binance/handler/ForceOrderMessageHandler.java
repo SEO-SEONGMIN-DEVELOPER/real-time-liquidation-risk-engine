@@ -2,6 +2,8 @@ package com.liquidation.riskengine.infra.binance.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
+import com.liquidation.riskengine.domain.service.LeverageDistributionService;
+import com.liquidation.riskengine.domain.service.MarkPriceCache;
 import com.liquidation.riskengine.infra.binance.dto.ForceOrderEvent;
 import com.liquidation.riskengine.infra.redis.service.RedisTimeSeriesService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,8 @@ public class ForceOrderMessageHandler implements BinanceMessageHandler {
 
     private final ObjectMapper objectMapper;
     private final RedisTimeSeriesService redisTimeSeriesService;
+    private final LeverageDistributionService leverageDistributionService;
+    private final MarkPriceCache markPriceCache;
 
     @Override
     public boolean supports(String streamName) {
@@ -49,7 +53,12 @@ public class ForceOrderMessageHandler implements BinanceMessageHandler {
 
             redisTimeSeriesService.saveLiquidationEvent(liqEvent);
 
-            log.info("[ForceOrder] symbol={}, side={}, price={}, qty={}, notional={}, status={} → Redis 저장 완료",
+            BigDecimal markPrice = markPriceCache.get(order.getSymbol());
+            if (markPrice != null) {
+                leverageDistributionService.recordLiquidation(liqEvent, markPrice);
+            }
+
+            log.info("[ForceOrder] symbol={}, side={}, price={}, qty={}, notional={}, status={} → Redis 저장 + 레버리지 분포 업데이트",
                     order.getSymbol(), order.getSide(), price,
                     order.getOriginalQuantity(), notional, order.getOrderStatus());
 
