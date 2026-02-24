@@ -2,6 +2,8 @@ package com.liquidation.riskengine.domain.service;
 
 import com.liquidation.riskengine.domain.model.CascadeRiskReport;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport.LiqCluster;
+import com.liquidation.riskengine.domain.model.LiquidationEvent;
+import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot.PriceLevel;
 import com.liquidation.riskengine.domain.service.LiquidationPriceCalculator.EstimatedLiquidation;
@@ -167,6 +169,86 @@ public class CascadeRiskCalculator {
                         .toList());
 
         return report;
+    }
+
+    public CascadeRiskReport analyzeMarketPressure(
+            CascadeRiskReport report,
+            OpenInterestSnapshot latestOi,
+            List<LiquidationEvent> recentLiqs,
+            OrderBookSnapshot orderBook) {
+
+        int oiScore = calcOiPressureScore(latestOi);
+        int liqScore = calcLiqIntensityScore(recentLiqs);
+        int imbScore = calcImbalanceScore(orderBook);
+        int total = oiScore + liqScore + imbScore;
+
+        report.setOiPressureScore(oiScore);
+        report.setLiqIntensityScore(liqScore);
+        report.setImbalanceScore(imbScore);
+        report.setMarketPressureTotal(total);
+
+        log.info("{} | OI압력={}/20 | 청산강도={}/20 | 불균형={}/20 | 시장압력 합계={}/60",
+                report.getSymbol(), oiScore, liqScore, imbScore, total);
+
+        return report;
+    }
+
+    private int calcOiPressureScore(OpenInterestSnapshot oi) {
+        if (oi == null || oi.getChangePercent() == null) return 5;
+        double changePercent = Math.abs(oi.getChangePercent().doubleValue());
+
+        if (changePercent >= 5.0) return 20;
+        if (changePercent >= 3.0) return 16;
+        if (changePercent >= 2.0) return 12;
+        if (changePercent >= 1.0) return 8;
+        if (changePercent >= 0.5) return 4;
+        return 0;
+    }
+
+    private int calcLiqIntensityScore(List<LiquidationEvent> recentLiqs) {
+        if (recentLiqs == null || recentLiqs.isEmpty()) return 0;
+
+        int count = recentLiqs.size();
+        BigDecimal totalNotional = recentLiqs.stream()
+                .map(LiquidationEvent::getNotionalValue)
+                .filter(n -> n != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        int countScore;
+        if (count >= 50) countScore = 10;
+        else if (count >= 30) countScore = 8;
+        else if (count >= 15) countScore = 6;
+        else if (count >= 5) countScore = 3;
+        else countScore = 1;
+
+        double notionalM = totalNotional.doubleValue() / 1_000_000.0;
+        int notionalScore;
+        if (notionalM >= 50) notionalScore = 10;
+        else if (notionalM >= 20) notionalScore = 8;
+        else if (notionalM >= 10) notionalScore = 6;
+        else if (notionalM >= 5) notionalScore = 4;
+        else if (notionalM >= 1) notionalScore = 2;
+        else notionalScore = 0;
+
+        return Math.min(20, countScore + notionalScore);
+    }
+
+    private int calcImbalanceScore(OrderBookSnapshot ob) {
+        if (ob == null) return 5;
+
+        BigDecimal bidQty = ob.getBidTotalQuantity() != null ? ob.getBidTotalQuantity() : BigDecimal.ZERO;
+        BigDecimal askQty = ob.getAskTotalQuantity() != null ? ob.getAskTotalQuantity() : BigDecimal.ZERO;
+        BigDecimal total = bidQty.add(askQty);
+
+        if (total.compareTo(BigDecimal.ZERO) == 0) return 10;
+        double bidRatio = bidQty.doubleValue() / total.doubleValue();
+        double imbalance = Math.abs(bidRatio - 0.5) * 2;
+
+        if (imbalance >= 0.7) return 20;
+        if (imbalance >= 0.5) return 15;
+        if (imbalance >= 0.3) return 10;
+        if (imbalance >= 0.15) return 5;
+        return 0;
     }
 
     private String resolveDirection(String positionSide) {

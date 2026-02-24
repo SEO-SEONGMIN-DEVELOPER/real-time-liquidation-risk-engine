@@ -38,6 +38,11 @@ public class CascadeRiskReport {
     private int overlappingTierCount;
     private BigDecimal estimatedLiqVolume;
 
+    private int oiPressureScore;
+    private int liqIntensityScore;
+    private int imbalanceScore;
+    private int marketPressureTotal;
+
     private long timestamp;
 
     @Getter
