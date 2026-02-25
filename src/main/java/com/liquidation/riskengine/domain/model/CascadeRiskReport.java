@@ -43,7 +43,35 @@ public class CascadeRiskReport {
     private int imbalanceScore;
     private int marketPressureTotal;
 
+    private double densityScore;
+    private DensityLevel densityLevel;
+    private double cascadeReachProbability;
+    private RiskLevel riskLevel;
+
     private long timestamp;
+
+    public enum RiskLevel {
+        LOW, MEDIUM, HIGH, CRITICAL;
+
+        public static RiskLevel fromScore(double score) {
+            if (score >= 76) return CRITICAL;
+            if (score >= 51) return HIGH;
+            if (score >= 26) return MEDIUM;
+            return LOW;
+        }
+    }
+
+    public enum DensityLevel {
+        THIN, SPARSE, MODERATE, THICK, WALL;
+
+        public static DensityLevel fromScore(double score) {
+            if (score >= 80) return THIN;
+            if (score >= 60) return SPARSE;
+            if (score >= 40) return MODERATE;
+            if (score >= 20) return THICK;
+            return WALL;
+        }
+    }
 
     @Getter
     @Builder
