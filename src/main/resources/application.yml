@@ -5,6 +5,9 @@ spring:
   application:
     name: risk-engine
 
+  flyway:
+    enabled: false
+
 # Binance Futures WebSocket 설정
 binance:
   ws-base-url: wss://fstream.binance.com
@@ -67,7 +70,7 @@ montecarlo:
     - 240
     - 1440
   volatility-window: "1h"
-  throttle-interval-seconds: 60
+  throttle-interval-seconds: 30
   use-fat-tail: true
   degrees-of-freedom: 5.0
 
@@ -103,6 +106,9 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+  flyway:
+    enabled: false
 
 server:
   port: 8080
@@ -150,6 +156,9 @@ spring:
       host: localhost
       port: 6379
 
+  flyway:
+    enabled: true
+
 server:
   port: 8080
 
@@ -172,6 +181,9 @@ spring:
   config:
     activate:
       on-profile: light
+
+  flyway:
+    enabled: false
 
 binance:
   symbols:
@@ -205,14 +217,14 @@ spring:
       on-profile: prod
 
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${SPRING_DATASOURCE_URL:${DB_URL}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USERNAME}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD}}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
     properties:
       hibernate:
         default_batch_fetch_size: 100
@@ -221,8 +233,11 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT:6379}
+      host: ${SPRING_DATA_REDIS_HOST:${REDIS_HOST}}
+      port: ${SPRING_DATA_REDIS_PORT:${REDIS_PORT:6379}}
+
+  flyway:
+    enabled: true
 
 server:
   port: ${SERVER_PORT:8080}
