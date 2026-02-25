@@ -1,7 +1,9 @@
 package com.liquidation.riskengine.domain.service;
 
 import com.liquidation.riskengine.domain.model.CascadeRiskReport;
+import com.liquidation.riskengine.domain.model.CascadeRiskReport.DensityLevel;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport.LiqCluster;
+import com.liquidation.riskengine.domain.model.CascadeRiskReport.RiskLevel;
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
@@ -249,6 +251,102 @@ public class CascadeRiskCalculator {
         if (imbalance >= 0.3) return 10;
         if (imbalance >= 0.15) return 5;
         return 0;
+    }
+
+    public CascadeRiskReport synthesize(CascadeRiskReport report) {
+        double densityScore = calcDensityScore(report);
+        DensityLevel densityLevel = DensityLevel.fromScore(densityScore);
+
+        double reachProb = calcCascadeReachProbability(report);
+
+        double combinedScore = densityScore * 0.6 + report.getMarketPressureTotal() * (100.0 / 60.0) * 0.4;
+        combinedScore = Math.max(0, Math.min(100, combinedScore));
+        RiskLevel riskLevel = RiskLevel.fromScore(combinedScore);
+
+        report.setDensityScore(Math.round(densityScore * 10.0) / 10.0);
+        report.setDensityLevel(densityLevel);
+        report.setCascadeReachProbability(Math.round(reachProb * 10.0) / 10.0);
+        report.setRiskLevel(riskLevel);
+
+        log.info("{} | densityScore={} ({}) | reachProb={}% | riskLevel={}",
+                report.getSymbol(),
+                String.format("%.1f", densityScore), densityLevel,
+                String.format("%.1f", reachProb),
+                riskLevel);
+
+        return report;
+    }
+
+    private double calcDensityScore(CascadeRiskReport r) {
+        double distScore = scoreDist(r.getDistancePercent());
+        double depthScore = scoreDepthRatio(r.getDepthRatio());
+        double levelScore = scoreLevelCount(r.getLevelCount());
+        double clusterScore = scoreClusterOverlap(r.getOverlappingTierCount());
+        double notionalScore = scoreNotional(r.getNotionalBetween());
+
+        return distScore * 0.30
+                + depthScore * 0.30
+                + levelScore * 0.15
+                + clusterScore * 0.15
+                + notionalScore * 0.10;
+    }
+
+    private double scoreDist(double distPct) {
+        if (distPct <= 1) return 100;
+        if (distPct <= 2) return 85;
+        if (distPct <= 3) return 70;
+        if (distPct <= 5) return 50;
+        if (distPct <= 8) return 30;
+        if (distPct <= 15) return 15;
+        return 5;
+    }
+
+    private double scoreDepthRatio(double depthRatio) {
+        if (depthRatio < 3) return 100;
+        if (depthRatio < 8) return 80;
+        if (depthRatio < 15) return 60;
+        if (depthRatio < 30) return 40;
+        if (depthRatio < 50) return 20;
+        return 5;
+    }
+
+    private double scoreLevelCount(int levels) {
+        if (levels <= 1) return 100;
+        if (levels <= 3) return 75;
+        if (levels <= 5) return 50;
+        if (levels <= 10) return 30;
+        return 10;
+    }
+
+    private double scoreClusterOverlap(int tiers) {
+        if (tiers >= 5) return 100;
+        if (tiers >= 3) return 75;
+        if (tiers >= 2) return 50;
+        if (tiers >= 1) return 30;
+        return 0;
+    }
+
+    private double scoreNotional(BigDecimal notional) {
+        if (notional == null) return 50;
+        double million = notional.doubleValue() / 1_000_000.0;
+        if (million < 0.5) return 100;
+        if (million < 2) return 75;
+        if (million < 5) return 50;
+        if (million < 20) return 25;
+        return 5;
+    }
+
+    private double calcCascadeReachProbability(CascadeRiskReport r) {
+        double distFactor = Math.max(0, 100 - r.getDistancePercent() * 15);
+
+        double depthFactor = Math.max(0, 100 - r.getDepthRatio() * 3);
+
+        double clusterFactor = Math.min(100, r.getOverlappingTierCount() * 25);
+
+        double marketBoost = r.getMarketPressureTotal() * (100.0 / 60.0) * 0.15;
+
+        double prob = distFactor * 0.40 + depthFactor * 0.35 + clusterFactor * 0.25 + marketBoost;
+        return Math.max(0, Math.min(100, prob));
     }
 
     private String resolveDirection(String positionSide) {
