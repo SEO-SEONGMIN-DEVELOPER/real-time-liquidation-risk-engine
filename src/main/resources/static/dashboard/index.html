@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liquidation Risk Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard/styles.css?v=7" />
+</head>
+<body>
+  <div class="screen-bg"></div>
+  <div class="app-shell">
+    <header class="top-strip">
+      <div class="brand">
+        <span class="brand-mark">◆</span>
+        <span data-i18n="brandTitle">LIQUIDATION TERMINAL</span>
+      </div>
+      <div class="top-right">
+        <div class="lang-selector" id="lang-selector">
+          <button class="lang-btn" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="ko">한</button>
+          <button class="lang-btn" data-lang="zh">中</button>
+          <button class="lang-btn" data-lang="ja">日</button>
+          <button class="lang-btn" data-lang="tr">TR</button>
+          <button class="lang-btn" data-lang="ru">RU</button>
+          <button class="lang-btn" data-lang="es">ES</button>
+          <button class="lang-btn" data-lang="pt">PT</button>
+        </div>
+        <div class="connection">
+        <span id="ws-status-dot" class="status-dot offline"></span>
+        <span id="ws-status-text" data-i18n="wsDisconnected">Disconnected</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="center-stage">
+      <section id="setup-view" class="terminal-card setup-card">
+        <h1 data-i18n="setupTitle">Risk Monitor Setup</h1>
+        <p class="sub" data-i18n="setupSub">종목 정보 입력 후 실시간 위험 모니터링을 시작하세요.</p>
+
+        <form id="monitor-form" class="setup-grid">
+          <label class="field">
+            <span data-i18n="labelSymbol">종목명</span>
+            <select id="symbol" required>
+              <option value="BTCUSDT">BTCUSDT</option>
+              <option value="ETHUSDT">ETHUSDT</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span data-i18n="labelLiqPrice">청산가</span>
+            <input id="liq-price" type="number" min="0" step="any" placeholder="예: 64000" required />
+          </label>
+
+          <label class="field">
+            <span data-i18n="labelSide">포지션</span>
+            <select id="position-side">
+              <option value="LONG" data-i18n="sideLong">LONG</option>
+              <option value="SHORT" data-i18n="sideShort">SHORT</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span data-i18n="labelLeverage">레버리지</span>
+            <input id="leverage" type="number" min="1" max="125" value="20" required />
+          </label>
+
+          <button id="start-btn" type="submit" class="btn start" data-i18n="startMonitoring">모니터링 시작</button>
+        </form>
+        <p id="form-message" class="message"></p>
+      </section>
+
+      <section id="monitor-view" class="terminal-card monitor-card hidden">
+        <header class="monitor-header">
+          <div class="header-left">
+            <h2 data-i18n="liveDashboard">Live Risk Dashboard</h2>
+            <div class="active-tags">
+              <span id="active-symbol" class="tag">--</span>
+              <span id="active-side" class="tag">--</span>
+              <span id="active-lev" class="tag">--</span>
+              <span id="active-liq" class="tag">Liq: --</span>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button id="back-btn" class="btn ghost" data-i18n="btnBack">설정으로</button>
+            <button id="stop-btn" class="btn danger" data-i18n="btnStop">중지</button>
+          </div>
+        </header>
+
+        <section class="monitor-grid">
+          <article class="panel current-panel">
+            <div class="panel-head">
+              <div class="panel-chip current" data-i18n="sectionCurrent">Current</div>
+              <h3 data-i18n="cascadeMetrics">Cascade Metrics</h3>
+            </div>
+
+            <div class="primary-row">
+              <article class="emphasis-card">
+                <p class="k" data-i18n="summaryCascadeRisk">Cascade Risk</p>
+                <p id="m-cascade-risk" class="v">--</p>
+              </article>
+              <article class="emphasis-card">
+                <p class="k" data-i18n="summaryReachProb">Reach Prob.</p>
+                <p id="m-reach-prob" class="v">--</p>
+              </article>
+            </div>
+
+            <div class="primary-row">
+              <article class="stat">
+                <p class="k" data-i18n="metricCurrentPrice">Current Price</p>
+                <p id="current-price" class="v">--</p>
+              </article>
+              <article class="stat">
+                <p class="k" data-i18n="metricLiqPrice">Liquidation Price</p>
+                <p id="liquidation-price" class="v">--</p>
+              </article>
+            </div>
+
+            <div class="grid two">
+              <div class="cell"><span data-i18n="metricDistance">Distance</span><strong id="distance">--</strong></div>
+              <div class="cell"><span data-i18n="metricDirection">Direction</span><strong id="direction">--</strong></div>
+              <div class="cell"><span data-i18n="metricDensityScore">Density Score</span><strong id="density">--</strong></div>
+              <div class="cell"><span data-i18n="metricMarketPressure">Market Pressure</span><strong id="pressure">--</strong></div>
+            </div>
+
+            <div class="grid three pressure-grid">
+              <div class="cell"><span data-i18n="metricOiScore">OI Score</span><strong id="oi-score">--</strong></div>
+              <div class="cell"><span data-i18n="metricLiqScore">Liq Score</span><strong id="liq-score">--</strong></div>
+              <div class="cell"><span data-i18n="metricImbalance">Imbalance</span><strong id="imbal-score">--</strong></div>
+            </div>
+          </article>
+
+          <article class="panel forecast-panel">
+            <div class="panel-head">
+              <div class="panel-chip forecast" data-i18n="sectionForecast">Forecast</div>
+              <h3 data-i18n="monteCarlo">Monte Carlo</h3>
+            </div>
+
+            <div class="primary-row one">
+              <article class="emphasis-card mc">
+                <p class="k" data-i18n="summaryMcRisk">MC Risk</p>
+                <p id="m-mc-risk" class="v">--</p>
+              </article>
+            </div>
+
+            <div class="mc-graph-area">
+              <div id="horizon-list" class="horizon-list">
+                <p class="empty" data-i18n="mcNoData">아직 Monte Carlo 데이터가 없습니다.</p>
+              </div>
+            </div>
+            <div class="mc-meta">
+              <span id="mc-sigma">Volatility(σ): --</span>
+              <span id="mc-paths">Paths: --</span>
+            </div>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <section class="feedback-panel">
+      <h3 data-i18n="feedbackTitle">의견 남기기</h3>
+      <p class="feedback-sub" data-i18n="feedbackSub">개선 아이디어나 버그를 자유롭게 남겨주세요.</p>
+      <form id="feedback-form" class="feedback-form">
+        <input
+          id="feedback-name"
+          type="text"
+          maxlength="50"
+          data-i18n-placeholder="feedbackNamePlaceholder"
+          placeholder="닉네임(선택)"
+        />
+        <textarea
+          id="feedback-message"
+          maxlength="2000"
+          required
+          data-i18n-placeholder="feedbackMessagePlaceholder"
+          placeholder="의견을 입력해주세요."
+        ></textarea>
+        <div class="feedback-actions">
+          <button id="feedback-submit" type="submit" class="btn start" data-i18n="feedbackSubmit">의견 보내기</button>
+          <span id="feedback-result" class="feedback-result"></span>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <script src="/dashboard/i18n.js?v=7"></script>
+  <script src="/dashboard/app.js?v=7"></script>
+</body>
+</html>
