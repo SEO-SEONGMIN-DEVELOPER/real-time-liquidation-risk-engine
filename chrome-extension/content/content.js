@@ -29,6 +29,8 @@
     markPrice: null,
   };
 
+  let riskWidgetTimer = null;
+
   let isDragging = false;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
@@ -161,6 +163,7 @@
     togglePanel();
     startUpdateLoop();
     startPositionScraping();
+    initRiskWidget();
     console.log('[LiqHeatmap] 플로팅 패널 삽입 완료');
   }
 
@@ -518,6 +521,115 @@
     const cleaned = text.replace(/[^0-9.]/g, '');
     const num = parseFloat(cleaned);
     return isNaN(num) ? null : num;
+  }
+
+  function initRiskWidget() {
+    chrome.storage?.sync?.get(['liqRiskWidgetPosition'], (result) => {
+      RiskWidgetRenderer.create(result.liqRiskWidgetPosition || null);
+      startRiskWidgetLoop();
+    });
+  }
+
+  function startRiskWidgetLoop() {
+    if (riskWidgetTimer) clearInterval(riskWidgetTimer);
+    fetchAndUpdateRiskWidget();
+    riskWidgetTimer = setInterval(() => {
+      if (isEnabled) fetchAndUpdateRiskWidget();
+    }, 3000);
+  }
+
+  function fetchAndUpdateRiskWidget() {
+    const currentPrice = extractCurrentPrice();
+    if (!currentPrice || currentPrice <= 0) return;
+
+    const side = userPosition.side || 'LONG';
+    const symbol = extractSymbolFromPage() || 'BTCUSDT';
+    updateRiskWidgetWithLocalCalc(symbol, currentPrice, side);
+  }
+
+  function extractSymbolFromPage() {
+    const urlMatch = window.location.pathname.match(/\/futures\/(\w+)/i);
+    if (urlMatch) return urlMatch[1].toUpperCase();
+
+    const titleMatch = document.title.match(/(BTC|ETH|BNB|SOL|XRP|DOGE|ADA)\w*USDT/i);
+    if (titleMatch) return titleMatch[0].toUpperCase();
+
+    return null;
+  }
+
+  function updateRiskWidgetWithLocalCalc(symbol, currentPrice, side) {
+    const liqPrice = userPosition.liquidationPrice;
+    if (!liqPrice || liqPrice <= 0) {
+      RiskWidgetRenderer.update({
+        symbol: symbol,
+        currentPrice: currentPrice,
+        userLiquidationPrice: null,
+        positionSide: side,
+        riskLevel: null,
+        cascadeReachProbability: null,
+        densityScore: null,
+        densityLevel: null,
+        distancePercent: null,
+        direction: null,
+        depthBetween: null,
+        notionalBetween: null,
+        levelCount: null,
+        depthRatio: null,
+        clustersInPath: [],
+        oiPressureScore: null,
+        liqIntensityScore: null,
+        imbalanceScore: null,
+        marketPressureTotal: null,
+      });
+      return;
+    }
+
+    const distance = Math.abs(currentPrice - liqPrice);
+    const distancePercent = (distance / currentPrice) * 100;
+    const direction = side === 'SHORT' ? 'UP' : 'DOWN';
+
+    let riskLevel = 'LOW';
+    if (distancePercent <= 1) riskLevel = 'CRITICAL';
+    else if (distancePercent <= 3) riskLevel = 'HIGH';
+    else if (distancePercent <= 8) riskLevel = 'MEDIUM';
+
+    let densityScore = 0;
+    if (distancePercent <= 1) densityScore = 90;
+    else if (distancePercent <= 2) densityScore = 75;
+    else if (distancePercent <= 5) densityScore = 50;
+    else if (distancePercent <= 10) densityScore = 30;
+    else densityScore = 15;
+
+    let densityLevel = 'WALL';
+    if (densityScore >= 80) densityLevel = 'THIN';
+    else if (densityScore >= 60) densityLevel = 'SPARSE';
+    else if (densityScore >= 40) densityLevel = 'MODERATE';
+    else if (densityScore >= 20) densityLevel = 'THICK';
+
+    let reachProb = Math.max(0, Math.min(100, 100 - distancePercent * 12));
+
+    RiskWidgetRenderer.update({
+      symbol: symbol,
+      currentPrice: currentPrice,
+      userLiquidationPrice: liqPrice,
+      positionSide: side,
+      riskLevel: riskLevel,
+      cascadeReachProbability: Math.round(reachProb * 10) / 10,
+      densityScore: densityScore,
+      densityLevel: densityLevel,
+      distancePercent: Math.round(distancePercent * 100) / 100,
+      distance: distance,
+      direction: direction,
+      depthBetween: null,
+      notionalBetween: null,
+      levelCount: null,
+      depthRatio: null,
+      clustersInPath: [],
+      oiPressureScore: null,
+      liqIntensityScore: null,
+      imbalanceScore: null,
+      marketPressureTotal: null,
+    });
   }
 
   bootstrap();

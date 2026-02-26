@@ -1,0 +1,400 @@
+const RiskWidgetRenderer = (() => {
+  const C = {
+    bg:            '#181A20',
+    cardBg:        '#1E2329',
+    border:        '#2B3139',
+    textPrimary:   '#EAECEF',
+    textSecondary: '#848E9C',
+    textTertiary:  '#5E6673',
+    red:           '#F6465D',
+    redBg:         'rgba(246,70,93,0.10)',
+    orange:        '#F0B90B',
+    orangeBg:      'rgba(240,185,11,0.10)',
+    green:         '#0ECB81',
+    greenBg:       'rgba(14,203,129,0.10)',
+    blue:          '#1E9CF4',
+    blueBg:        'rgba(30,156,244,0.10)',
+    critical:      '#F6465D',
+    criticalBg:    'rgba(246,70,93,0.15)',
+    high:          '#F0B90B',
+    highBg:        'rgba(240,185,11,0.15)',
+    medium:        '#1E9CF4',
+    mediumBg:      'rgba(30,156,244,0.15)',
+    low:           '#0ECB81',
+    lowBg:         'rgba(14,203,129,0.15)',
+  };
+
+  let widget = null;
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  let isResizing = false;
+  let resizeStartX = 0;
+  let resizeStartY = 0;
+  let resizeStartW = 0;
+  let resizeStartH = 0;
+
+  function getRiskColor(level) {
+    switch (level) {
+      case 'CRITICAL': return { text: C.critical, bg: C.criticalBg };
+      case 'HIGH':     return { text: C.high,     bg: C.highBg };
+      case 'MEDIUM':   return { text: C.medium,   bg: C.mediumBg };
+      case 'LOW':      return { text: C.low,      bg: C.lowBg };
+      default:         return { text: C.textSecondary, bg: 'transparent' };
+    }
+  }
+
+  function getDensityColor(level) {
+    switch (level) {
+      case 'THIN':     return { text: C.critical, bg: C.criticalBg, label: 'Thin' };
+      case 'SPARSE':   return { text: C.high,     bg: C.highBg,     label: 'Sparse' };
+      case 'MODERATE': return { text: C.medium,   bg: C.mediumBg,   label: 'Moderate' };
+      case 'THICK':    return { text: C.green,    bg: C.greenBg,    label: 'Thick' };
+      case 'WALL':     return { text: C.green,    bg: C.greenBg,    label: 'Wall' };
+      default:         return { text: C.textSecondary, bg: 'transparent', label: '--' };
+    }
+  }
+
+  function fmtNum(n, digits) {
+    if (n === null || n === undefined) return '--';
+    return Number(n).toFixed(digits !== undefined ? digits : 2);
+  }
+
+  function fmtPrice(p) {
+    if (p === null || p === undefined) return '--';
+    const n = Number(p);
+    if (n >= 1000) return n.toFixed(1).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (n >= 1) return n.toFixed(2);
+    return n.toFixed(4);
+  }
+
+  function fmtPct(p) {
+    if (p === null || p === undefined) return '--';
+    return Number(p).toFixed(2) + '%';
+  }
+
+  function create(savedPosition) {
+    if (widget) return;
+
+    widget = document.createElement('div');
+    widget.id = 'liq-risk-widget';
+
+    widget.innerHTML = buildHTML();
+    document.body.appendChild(widget);
+
+    if (savedPosition && savedPosition.riskWidgetTop !== undefined) {
+      widget.style.top = savedPosition.riskWidgetTop + 'px';
+      widget.style.left = savedPosition.riskWidgetLeft + 'px';
+    } else {
+      widget.style.top = '80px';
+      widget.style.right = '12px';
+    }
+
+    setupDrag();
+    setupResize();
+    setupClose();
+  }
+
+  function buildHTML() {
+    return `
+      <div class="rw-header">
+        <div class="rw-header-left">
+          <span class="rw-icon">&#9888;</span>
+          <span class="rw-title">Cascade Risk</span>
+        </div>
+        <button class="rw-close">&times;</button>
+      </div>
+      <div class="rw-body">
+        <div class="rw-risk-badge-row">
+          <div class="rw-risk-badge" id="rw-risk-badge">--</div>
+          <div class="rw-reach-prob">
+            <span class="rw-label">Reach Prob.</span>
+            <span class="rw-value" id="rw-reach-prob">--%</span>
+          </div>
+        </div>
+        <div class="rw-divider"></div>
+        <div class="rw-gauge-section">
+          <div class="rw-gauge-header">
+            <span class="rw-label">Density Score</span>
+            <span class="rw-value-sm" id="rw-density-val">--</span>
+          </div>
+          <div class="rw-gauge-bar">
+            <div class="rw-gauge-fill" id="rw-density-fill"></div>
+          </div>
+          <div class="rw-gauge-labels">
+            <span>Wall</span><span>Thick</span><span>Moderate</span><span>Sparse</span><span>Thin</span>
+          </div>
+        </div>
+        <div class="rw-divider"></div>
+        <div class="rw-grid">
+          <div class="rw-grid-item">
+            <span class="rw-label">Distance</span>
+            <span class="rw-value" id="rw-distance">--</span>
+          </div>
+          <div class="rw-grid-item">
+            <span class="rw-label">Direction</span>
+            <span class="rw-value" id="rw-direction">--</span>
+          </div>
+          <div class="rw-grid-item">
+            <span class="rw-label">Liq. Price</span>
+            <span class="rw-value" id="rw-liq-price">--</span>
+          </div>
+          <div class="rw-grid-item">
+            <span class="rw-label">Current</span>
+            <span class="rw-value" id="rw-current-price">--</span>
+          </div>
+        </div>
+        <div class="rw-divider"></div>
+        <div class="rw-section-title">Order Book Path</div>
+        <div class="rw-grid">
+          <div class="rw-grid-item">
+            <span class="rw-label">Depth</span>
+            <span class="rw-value" id="rw-depth">--</span>
+          </div>
+          <div class="rw-grid-item">
+            <span class="rw-label">Notional</span>
+            <span class="rw-value" id="rw-notional">--</span>
+          </div>
+          <div class="rw-grid-item">
+            <span class="rw-label">Levels</span>
+            <span class="rw-value" id="rw-levels">--</span>
+          </div>
+          <div class="rw-grid-item">
+            <span class="rw-label">Depth Ratio</span>
+            <span class="rw-value" id="rw-depth-ratio">--</span>
+          </div>
+        </div>
+        <div class="rw-divider"></div>
+        <div class="rw-section-title">Liquidation Clusters</div>
+        <div class="rw-cluster-list" id="rw-cluster-list">
+          <div class="rw-no-data">No clusters in range</div>
+        </div>
+        <div class="rw-divider"></div>
+        <div class="rw-section-title">Market Pressure</div>
+        <div class="rw-pressure-row">
+          <div class="rw-pressure-item">
+            <div class="rw-pressure-bar-wrap">
+              <div class="rw-pressure-bar" id="rw-oi-bar"></div>
+            </div>
+            <span class="rw-pressure-label">OI</span>
+            <span class="rw-pressure-val" id="rw-oi-val">--</span>
+          </div>
+          <div class="rw-pressure-item">
+            <div class="rw-pressure-bar-wrap">
+              <div class="rw-pressure-bar" id="rw-liq-bar"></div>
+            </div>
+            <span class="rw-pressure-label">Liq</span>
+            <span class="rw-pressure-val" id="rw-liq-val">--</span>
+          </div>
+          <div class="rw-pressure-item">
+            <div class="rw-pressure-bar-wrap">
+              <div class="rw-pressure-bar" id="rw-imb-bar"></div>
+            </div>
+            <span class="rw-pressure-label">Imbal</span>
+            <span class="rw-pressure-val" id="rw-imb-val">--</span>
+          </div>
+        </div>
+        <div class="rw-pressure-total">
+          <span class="rw-label">Total Pressure</span>
+          <span class="rw-value" id="rw-pressure-total">--<span class="rw-sub">/60</span></span>
+        </div>
+      </div>
+      <div class="rw-resize"></div>
+    `;
+  }
+
+  function update(report) {
+    if (!widget || !report) return;
+
+    const riskColor = getRiskColor(report.riskLevel);
+    const badge = widget.querySelector('#rw-risk-badge');
+    badge.textContent = report.riskLevel || '--';
+    badge.style.color = riskColor.text;
+    badge.style.background = riskColor.bg;
+    badge.style.borderColor = riskColor.text;
+
+    const reachEl = widget.querySelector('#rw-reach-prob');
+    reachEl.textContent = fmtPct(report.cascadeReachProbability);
+    reachEl.style.color = riskColor.text;
+
+    const densityVal = widget.querySelector('#rw-density-val');
+    const densityInfo = getDensityColor(report.densityLevel);
+    densityVal.textContent = fmtNum(report.densityScore, 1) + ' / 100';
+    densityVal.style.color = densityInfo.text;
+
+    const densityFill = widget.querySelector('#rw-density-fill');
+    const pct = Math.max(0, Math.min(100, report.densityScore || 0));
+    densityFill.style.width = pct + '%';
+    densityFill.style.background = densityInfo.text;
+
+    widget.querySelector('#rw-distance').textContent = fmtPct(report.distancePercent);
+    const dirEl = widget.querySelector('#rw-direction');
+    if (report.direction === 'DOWN') {
+      dirEl.textContent = '▼ Down';
+      dirEl.style.color = C.red;
+    } else if (report.direction === 'UP') {
+      dirEl.textContent = '▲ Up';
+      dirEl.style.color = C.green;
+    } else {
+      dirEl.textContent = '--';
+      dirEl.style.color = C.textSecondary;
+    }
+    widget.querySelector('#rw-liq-price').textContent = fmtPrice(report.userLiquidationPrice);
+    widget.querySelector('#rw-current-price').textContent = fmtPrice(report.currentPrice);
+
+    widget.querySelector('#rw-depth').textContent = fmtNum(report.depthBetween, 4);
+    const notional = report.notionalBetween;
+    if (notional !== null && notional !== undefined) {
+      const n = Number(notional);
+      if (n >= 1000000) {
+        widget.querySelector('#rw-notional').textContent = (n / 1000000).toFixed(2) + 'M';
+      } else if (n >= 1000) {
+        widget.querySelector('#rw-notional').textContent = (n / 1000).toFixed(1) + 'K';
+      } else {
+        widget.querySelector('#rw-notional').textContent = fmtNum(n, 0);
+      }
+    } else {
+      widget.querySelector('#rw-notional').textContent = '--';
+    }
+    widget.querySelector('#rw-levels').textContent = report.levelCount !== undefined ? report.levelCount : '--';
+    widget.querySelector('#rw-depth-ratio').textContent = fmtPct(report.depthRatio);
+
+    renderClusters(report.clustersInPath || []);
+
+    updatePressureBar('rw-oi-bar', 'rw-oi-val', report.oiPressureScore, 20);
+    updatePressureBar('rw-liq-bar', 'rw-liq-val', report.liqIntensityScore, 20);
+    updatePressureBar('rw-imb-bar', 'rw-imb-val', report.imbalanceScore, 20);
+
+    const totalEl = widget.querySelector('#rw-pressure-total');
+    totalEl.querySelector('.rw-value').innerHTML =
+      (report.marketPressureTotal !== undefined ? report.marketPressureTotal : '--') +
+      '<span class="rw-sub">/60</span>';
+  }
+
+  function updatePressureBar(barId, valId, score, max) {
+    const bar = widget.querySelector('#' + barId);
+    const val = widget.querySelector('#' + valId);
+    const s = score !== undefined ? score : 0;
+    const pct = Math.max(0, Math.min(100, (s / max) * 100));
+    bar.style.width = pct + '%';
+
+    let color;
+    if (pct >= 75) color = C.critical;
+    else if (pct >= 50) color = C.high;
+    else if (pct >= 25) color = C.medium;
+    else color = C.green;
+    bar.style.background = color;
+
+    val.textContent = s + '/' + max;
+    val.style.color = color;
+  }
+
+  function renderClusters(clusters) {
+    const list = widget.querySelector('#rw-cluster-list');
+    if (!clusters || clusters.length === 0) {
+      list.innerHTML = '<div class="rw-no-data">No clusters in range</div>';
+      return;
+    }
+
+    const sorted = [...clusters].sort((a, b) => a.distanceFromCurrentPercent - b.distanceFromCurrentPercent);
+    const maxVol = Math.max(...sorted.map(c => Number(c.estimatedNotional || 0)), 1);
+
+    list.innerHTML = sorted.map(c => {
+      const volPct = Math.max(3, (Number(c.estimatedNotional || 0) / maxVol) * 100);
+      const notional = Number(c.estimatedNotional || 0);
+      let notionalStr;
+      if (notional >= 1000000) notionalStr = (notional / 1000000).toFixed(2) + 'M';
+      else if (notional >= 1000) notionalStr = (notional / 1000).toFixed(1) + 'K';
+      else notionalStr = notional.toFixed(0);
+
+      return `
+        <div class="rw-cluster-row">
+          <span class="rw-cluster-lev">${c.leverage}x</span>
+          <div class="rw-cluster-bar-wrap">
+            <div class="rw-cluster-bar" style="width:${volPct}%"></div>
+          </div>
+          <span class="rw-cluster-vol">${notionalStr}</span>
+          <span class="rw-cluster-dist">${fmtNum(c.distanceFromCurrentPercent, 2)}%</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function setupDrag() {
+    const header = widget.querySelector('.rw-header');
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('rw-close')) return;
+      isDragging = true;
+      const rect = widget.getBoundingClientRect();
+      dragOffsetX = e.clientX - rect.left;
+      dragOffsetY = e.clientY - rect.top;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      widget.style.left = Math.max(0, e.clientX - dragOffsetX) + 'px';
+      widget.style.top = Math.max(0, e.clientY - dragOffsetY) + 'px';
+      widget.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      savePosition();
+    });
+  }
+
+  function setupResize() {
+    const handle = widget.querySelector('.rw-resize');
+    handle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      resizeStartX = e.clientX;
+      resizeStartY = e.clientY;
+      resizeStartW = widget.clientWidth;
+      resizeStartH = widget.clientHeight;
+      document.body.style.cursor = 'nwse-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const newW = Math.max(200, Math.min(500, resizeStartW + (e.clientX - resizeStartX)));
+      const newH = Math.max(200, Math.min(800, resizeStartH + (e.clientY - resizeStartY)));
+      widget.style.width = newW + 'px';
+      widget.style.height = newH + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) return;
+      isResizing = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  }
+
+  function setupClose() {
+    widget.querySelector('.rw-close').addEventListener('click', () => {
+      widget.style.display = 'none';
+    });
+  }
+
+  function savePosition() {
+    const rect = widget.getBoundingClientRect();
+    chrome.storage?.sync?.set({
+      liqRiskWidgetPosition: {
+        riskWidgetTop: rect.top,
+        riskWidgetLeft: rect.left,
+      },
+    });
+  }
+
+  function show() { if (widget) widget.style.display = 'flex'; }
+  function hide() { if (widget) widget.style.display = 'none'; }
+  function isCreated() { return !!widget; }
+
+  return { create, update, show, hide, isCreated };
+})();
