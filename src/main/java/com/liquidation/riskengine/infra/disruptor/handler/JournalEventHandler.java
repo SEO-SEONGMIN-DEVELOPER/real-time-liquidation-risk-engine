@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Component
@@ -24,6 +25,8 @@ public class JournalEventHandler implements EventHandler<MarketDataEvent> {
     private static final String LIQ_EVENTS_KEY = "liq:events:";
     private static final String OB_SNAPSHOTS_KEY = "ob:snapshots:";
     private static final String OB_LATEST_KEY = "ob:latest:";
+    private static final String LIQ_SYMBOLS_SET_KEY = "symbols:liq";
+    private static final String OB_SYMBOLS_SET_KEY = "symbols:ob";
 
     private final List<LiquidationEvent> pendingLiquidations = new ArrayList<>();
     private final List<OrderBookSnapshot> pendingOrderBooks = new ArrayList<>();
@@ -67,15 +70,19 @@ public class JournalEventHandler implements EventHandler<MarketDataEvent> {
                     var ops = (RedisOperations<String, Object>) operations;
 
                     for (LiquidationEvent liq : pendingLiquidations) {
-                        String key = LIQ_EVENTS_KEY + liq.getSymbol().toUpperCase();
+                        String symbol = liq.getSymbol().toUpperCase(Locale.ROOT);
+                        String key = LIQ_EVENTS_KEY + symbol;
                         ops.opsForZSet().add(key, liq, liq.getTimestamp());
+                        ops.opsForSet().add(LIQ_SYMBOLS_SET_KEY, symbol);
                     }
 
                     for (OrderBookSnapshot ob : pendingOrderBooks) {
-                        String key = OB_SNAPSHOTS_KEY + ob.getSymbol().toUpperCase();
+                        String symbol = ob.getSymbol().toUpperCase(Locale.ROOT);
+                        String key = OB_SNAPSHOTS_KEY + symbol;
                         ops.opsForZSet().add(key, ob, ob.getTimestamp());
+                        ops.opsForSet().add(OB_SYMBOLS_SET_KEY, symbol);
 
-                        String latestKey = OB_LATEST_KEY + ob.getSymbol().toUpperCase();
+                        String latestKey = OB_LATEST_KEY + symbol;
                         ops.opsForValue().set(latestKey, ob);
                     }
 
