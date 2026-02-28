@@ -543,11 +543,11 @@
     const currentPrice = extractCurrentPrice();
     if (!currentPrice || currentPrice <= 0) return;
 
-    const liqPrice = userPosition.liquidationPrice;
+    const liqPrice = userPosition.liquidationPrice || Math.round(currentPrice * 0.95 * 100) / 100;
     const side = userPosition.side || 'LONG';
     const symbol = extractSymbolFromPage() || 'BTCUSDT';
 
-    fetchCascadeRisk(symbol, currentPrice, liqPrice || 0, side);
+    fetchCascadeRisk(symbol, currentPrice, liqPrice, side);
   }
 
   function extractSymbolFromPage() {

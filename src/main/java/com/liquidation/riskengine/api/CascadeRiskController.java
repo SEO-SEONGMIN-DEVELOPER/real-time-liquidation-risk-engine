@@ -23,7 +23,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/risk")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"chrome-extension://*", "https://*.binance.com", "https://*.binance.bh"})
+@CrossOrigin(origins = "*")
 public class CascadeRiskController {
 
     private final CascadeRiskCalculator cascadeRiskCalculator;
