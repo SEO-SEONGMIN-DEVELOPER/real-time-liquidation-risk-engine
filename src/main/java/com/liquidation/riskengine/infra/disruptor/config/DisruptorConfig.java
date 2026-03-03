@@ -8,7 +8,11 @@ import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
 import com.liquidation.riskengine.infra.disruptor.event.MarketDataEventFactory;
 import com.liquidation.riskengine.infra.disruptor.event.RiskResultEvent;
 import com.liquidation.riskengine.infra.disruptor.event.RiskResultEventFactory;
+import com.liquidation.riskengine.infra.disruptor.handler.CacheUpdateHandler;
+import com.liquidation.riskengine.infra.disruptor.handler.JournalEventHandler;
+import com.liquidation.riskengine.infra.disruptor.handler.ParseEventHandler;
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,10 +22,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 public class DisruptorConfig {
 
     private static final int INGEST_BUFFER_SIZE = 1024 * 64;
     private static final int OUTPUT_BUFFER_SIZE = 1024 * 16;
+
+    private final ParseEventHandler parseEventHandler;
+    private final JournalEventHandler journalEventHandler;
+    private final CacheUpdateHandler cacheUpdateHandler;
 
     private Disruptor<MarketDataEvent> ingestDisruptor;
     private Disruptor<RiskResultEvent> outputDisruptor;
@@ -36,7 +45,13 @@ public class DisruptorConfig {
                 new YieldingWaitStrategy()
         );
 
-        log.info("[Disruptor] Ingest RingBuffer 생성 완료 (size={}, wait=YieldingWaitStrategy, producer=SINGLE)",
+        ingestDisruptor
+                .handleEventsWith(parseEventHandler)
+                .then(journalEventHandler, cacheUpdateHandler);
+
+        ingestDisruptor.start();
+
+        log.info("[Disruptor] Ingest 파이프라인 기동 완료: Parse → (Journal + Cache) | size={}, producer=SINGLE",
                 INGEST_BUFFER_SIZE);
 
         return ingestDisruptor;

@@ -5,10 +5,9 @@ import com.liquidation.riskengine.domain.service.MarkPriceCache;
 import com.liquidation.riskengine.infra.binance.dto.MarkPriceEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 @Slf4j
-@Component
+@Deprecated(forRemoval = true)
 @RequiredArgsConstructor
 public class MarkPriceMessageHandler implements BinanceMessageHandler {
 
