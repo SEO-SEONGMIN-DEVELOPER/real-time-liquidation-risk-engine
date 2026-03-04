@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +29,33 @@ public class CascadeRiskCalculator {
     private final LiquidationPriceCalculator liquidationPriceCalculator;
 
     private static final MathContext MC = new MathContext(8, RoundingMode.HALF_UP);
+    private static final Duration RECENT_LIQ_WINDOW = Duration.ofMinutes(30);
+
+    public CascadeRiskReport fullAnalysis(
+            BigDecimal currentPrice,
+            BigDecimal userLiquidationPrice,
+            String positionSide,
+            String symbol,
+            RiskStateManager state) {
+
+        CascadeRiskReport report = analyzeDistance(currentPrice, userLiquidationPrice, positionSide, symbol);
+
+        OrderBookSnapshot orderBook = state.getLatestOrderBook(symbol);
+        if (orderBook != null) {
+            analyzeOrderBookDensity(report, orderBook);
+        }
+
+        OpenInterestSnapshot latestOi = state.getLatestOpenInterest(symbol);
+        BigDecimal totalOi = latestOi != null ? latestOi.getOpenInterest() : null;
+        mapLiquidationClusters(report, totalOi);
+
+        List<LiquidationEvent> recentLiqs = state.getRecentLiquidations(symbol, RECENT_LIQ_WINDOW);
+        analyzeMarketPressure(report, latestOi, recentLiqs, orderBook);
+
+        synthesize(report);
+
+        return report;
+    }
 
     public CascadeRiskReport analyzeDistance(
             BigDecimal currentPrice,
