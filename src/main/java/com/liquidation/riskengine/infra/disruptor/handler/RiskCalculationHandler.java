@@ -5,8 +5,8 @@ import com.lmax.disruptor.RingBuffer;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport;
 import com.liquidation.riskengine.domain.service.CascadeRiskCalculator;
 import com.liquidation.riskengine.domain.service.MarkPriceCache;
+import com.liquidation.riskengine.domain.model.UserPosition;
 import com.liquidation.riskengine.domain.service.RiskStateManager;
-import com.liquidation.riskengine.domain.service.RiskStateManager.UserPosition;
 import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
 import com.liquidation.riskengine.infra.disruptor.event.RiskResultEvent;
 import lombok.RequiredArgsConstructor;
@@ -45,8 +45,8 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
 
             CascadeRiskReport report = cascadeRiskCalculator.fullAnalysis(
                     currentPrice,
-                    position.liquidationPrice(),
-                    position.positionSide(),
+                    position.getLiquidationPrice(),
+                    position.getPositionSide(),
                     symbol,
                     riskStateManager);
 
