@@ -285,20 +285,21 @@ public class CascadeRiskCalculator {
         double densityScore = calcDensityScore(report);
         DensityLevel densityLevel = DensityLevel.fromScore(densityScore);
 
-        double reachProb = calcCascadeReachProbability(report);
+        double marketPressureNorm = report.getMarketPressureTotal() * (100.0 / 60.0);
+        double reachProb = densityScore * 0.6 + marketPressureNorm * 0.4;
+        reachProb = Math.max(0, Math.min(100, reachProb));
 
-        double combinedScore = densityScore * 0.6 + report.getMarketPressureTotal() * (100.0 / 60.0) * 0.4;
-        combinedScore = Math.max(0, Math.min(100, combinedScore));
-        RiskLevel riskLevel = RiskLevel.fromScore(combinedScore);
+        RiskLevel riskLevel = RiskLevel.fromScore(reachProb);
 
         report.setDensityScore(Math.round(densityScore * 10.0) / 10.0);
         report.setDensityLevel(densityLevel);
         report.setCascadeReachProbability(Math.round(reachProb * 10.0) / 10.0);
         report.setRiskLevel(riskLevel);
 
-        log.info("{} | densityScore={} ({}) | reachProb={}% | riskLevel={}",
+        log.info("{} | densityScore={} ({}) | marketPressure={}/60 | reachProb={}% | riskLevel={}",
                 report.getSymbol(),
                 String.format("%.1f", densityScore), densityLevel,
+                report.getMarketPressureTotal(),
                 String.format("%.1f", reachProb),
                 riskLevel);
 
@@ -362,19 +363,6 @@ public class CascadeRiskCalculator {
         if (million < 5) return 50;
         if (million < 20) return 25;
         return 5;
-    }
-
-    private double calcCascadeReachProbability(CascadeRiskReport r) {
-        double distFactor = Math.max(0, 100 - r.getDistancePercent() * 15);
-
-        double depthFactor = Math.max(0, 100 - r.getDepthRatio() * 3);
-
-        double clusterFactor = Math.min(100, r.getOverlappingTierCount() * 25);
-
-        double marketBoost = r.getMarketPressureTotal() * (100.0 / 60.0) * 0.15;
-
-        double prob = distFactor * 0.40 + depthFactor * 0.35 + clusterFactor * 0.25 + marketBoost;
-        return Math.max(0, Math.min(100, prob));
     }
 
     private String resolveDirection(String positionSide) {
