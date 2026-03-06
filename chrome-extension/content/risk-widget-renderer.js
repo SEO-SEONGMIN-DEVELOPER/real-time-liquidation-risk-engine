@@ -25,6 +25,8 @@ const RiskWidgetRenderer = (() => {
   };
 
   let widget = null;
+  let onRegisterCallback = null;
+  let onUnregisterCallback = null;
   let isDragging = false;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
@@ -74,13 +76,18 @@ const RiskWidgetRenderer = (() => {
     return Number(p).toFixed(2) + '%';
   }
 
-  function create(savedPosition) {
+  function create(savedPosition, opts) {
     if (widget) return;
+
+    if (opts) {
+      onRegisterCallback = opts.onRegister || null;
+      onUnregisterCallback = opts.onUnregister || null;
+    }
 
     widget = document.createElement('div');
     widget.id = 'liq-risk-widget';
 
-    widget.innerHTML = buildHTML();
+    widget.innerHTML = buildFormHTML() + buildHTML();
     document.body.appendChild(widget);
 
     if (savedPosition && savedPosition.riskWidgetTop !== undefined) {
@@ -94,9 +101,11 @@ const RiskWidgetRenderer = (() => {
     setupDrag();
     setupResize();
     setupClose();
+    setupForm();
+    showFormView();
   }
 
-  function buildHTML() {
+  function buildFormHTML() {
     return `
       <div class="rw-header">
         <div class="rw-header-left">
@@ -105,7 +114,50 @@ const RiskWidgetRenderer = (() => {
         </div>
         <button class="rw-close">&times;</button>
       </div>
-      <div class="rw-body">
+      <div class="rw-form" id="rw-form">
+        <div class="rw-form-group">
+          <label class="rw-form-label">Symbol</label>
+          <input type="text" id="rw-input-symbol" class="rw-input" placeholder="BTCUSDT" spellcheck="false" />
+        </div>
+        <div class="rw-form-group">
+          <label class="rw-form-label">Liquidation Price</label>
+          <input type="number" id="rw-input-liq-price" class="rw-input" placeholder="0.00" step="any" />
+        </div>
+        <div class="rw-form-row">
+          <div class="rw-form-group rw-form-half">
+            <label class="rw-form-label">Side</label>
+            <div class="rw-side-toggle" id="rw-side-toggle">
+              <button class="rw-side-btn active" data-side="LONG">Long</button>
+              <button class="rw-side-btn" data-side="SHORT">Short</button>
+            </div>
+          </div>
+          <div class="rw-form-group rw-form-half">
+            <label class="rw-form-label">Leverage</label>
+            <div class="rw-leverage-wrap">
+              <input type="number" id="rw-input-leverage" class="rw-input rw-input-sm" value="20" min="1" max="125" />
+              <span class="rw-leverage-x">×</span>
+            </div>
+          </div>
+        </div>
+        <button class="rw-submit-btn" id="rw-submit-btn">Start Monitoring</button>
+        <div class="rw-form-error" id="rw-form-error"></div>
+      </div>
+    `;
+  }
+
+  function buildHTML() {
+    return `
+      <div class="rw-monitor-header" id="rw-monitor-header" style="display:none">
+        <div class="rw-header-left">
+          <span class="rw-icon">&#9888;</span>
+          <span class="rw-title">Cascade Risk</span>
+        </div>
+        <div class="rw-header-right">
+          <button class="rw-stop-btn" id="rw-stop-btn">Stop</button>
+          <button class="rw-close">&times;</button>
+        </div>
+      </div>
+      <div class="rw-body" id="rw-body" style="display:none">
         <div class="rw-risk-badge-row">
           <div class="rw-risk-badge" id="rw-risk-badge">--</div>
           <div class="rw-reach-prob">
@@ -321,15 +373,82 @@ const RiskWidgetRenderer = (() => {
     }).join('');
   }
 
+  function setupForm() {
+    const toggle = widget.querySelector('#rw-side-toggle');
+    toggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.rw-side-btn');
+      if (!btn) return;
+      toggle.querySelectorAll('.rw-side-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+
+    widget.querySelector('#rw-submit-btn').addEventListener('click', () => {
+      const symbol = (widget.querySelector('#rw-input-symbol').value || '').trim().toUpperCase();
+      const liqPrice = parseFloat(widget.querySelector('#rw-input-liq-price').value);
+      const side = toggle.querySelector('.rw-side-btn.active')?.dataset.side || 'LONG';
+      const leverage = parseInt(widget.querySelector('#rw-input-leverage').value) || 20;
+      const errorEl = widget.querySelector('#rw-form-error');
+
+      if (!symbol) { errorEl.textContent = 'Symbol을 입력하세요'; return; }
+      if (!liqPrice || liqPrice <= 0) { errorEl.textContent = 'Liquidation Price를 입력하세요'; return; }
+      errorEl.textContent = '';
+
+      if (onRegisterCallback) {
+        onRegisterCallback({ symbol, liquidationPrice: liqPrice, side, leverage });
+      }
+      showMonitorView(symbol, side, leverage);
+    });
+
+    const symbolInput = widget.querySelector('#rw-input-symbol');
+    const url = window.location.pathname;
+    const match = url.match(/\/futures\/(\w+)/i);
+    if (match) symbolInput.value = match[1].toUpperCase();
+  }
+
+  function showFormView() {
+    if (!widget) return;
+    const form = widget.querySelector('#rw-form');
+    const formHeader = form?.previousElementSibling;
+    const monitorHeader = widget.querySelector('#rw-monitor-header');
+    const body = widget.querySelector('#rw-body');
+
+    if (form) form.style.display = '';
+    if (formHeader && formHeader.classList.contains('rw-header')) formHeader.style.display = '';
+    if (monitorHeader) monitorHeader.style.display = 'none';
+    if (body) body.style.display = 'none';
+  }
+
+  function showMonitorView(symbol, side, leverage) {
+    if (!widget) return;
+    const form = widget.querySelector('#rw-form');
+    const formHeader = form?.previousElementSibling;
+    const monitorHeader = widget.querySelector('#rw-monitor-header');
+    const body = widget.querySelector('#rw-body');
+
+    if (form) form.style.display = 'none';
+    if (formHeader && formHeader.classList.contains('rw-header')) formHeader.style.display = 'none';
+    if (monitorHeader) monitorHeader.style.display = '';
+    if (body) body.style.display = '';
+
+    const stopBtn = widget.querySelector('#rw-stop-btn');
+    if (stopBtn) {
+      stopBtn.onclick = () => {
+        if (onUnregisterCallback) onUnregisterCallback(symbol);
+        showFormView();
+      };
+    }
+  }
+
   function setupDrag() {
-    const header = widget.querySelector('.rw-header');
-    header.addEventListener('mousedown', (e) => {
-      if (e.target.classList.contains('rw-close')) return;
-      isDragging = true;
-      const rect = widget.getBoundingClientRect();
-      dragOffsetX = e.clientX - rect.left;
-      dragOffsetY = e.clientY - rect.top;
-      e.preventDefault();
+    widget.querySelectorAll('.rw-header, .rw-monitor-header').forEach(header => {
+      header.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('rw-close') || e.target.classList.contains('rw-stop-btn')) return;
+        isDragging = true;
+        const rect = widget.getBoundingClientRect();
+        dragOffsetX = e.clientX - rect.left;
+        dragOffsetY = e.clientY - rect.top;
+        e.preventDefault();
+      });
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -377,8 +496,10 @@ const RiskWidgetRenderer = (() => {
   }
 
   function setupClose() {
-    widget.querySelector('.rw-close').addEventListener('click', () => {
-      widget.style.display = 'none';
+    widget.querySelectorAll('.rw-close').forEach(btn => {
+      btn.addEventListener('click', () => {
+        widget.style.display = 'none';
+      });
     });
   }
 

@@ -463,3 +463,174 @@
 #liq-risk-widget .rw-resize:hover::after {
   border-color: #848E9C;
 }
+
+#liq-risk-widget .rw-monitor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 36px;
+  padding: 0 12px;
+  background: #1E2329;
+  cursor: grab;
+  user-select: none;
+  border-bottom: 1px solid #2B3139;
+  flex-shrink: 0;
+}
+
+#liq-risk-widget .rw-monitor-header:active { cursor: grabbing; }
+
+#liq-risk-widget .rw-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#liq-risk-widget .rw-stop-btn {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #F6465D;
+  background: rgba(246,70,93,0.10);
+  border: 1px solid rgba(246,70,93,0.25);
+  border-radius: 2px;
+  cursor: pointer;
+  line-height: 16px;
+}
+
+#liq-risk-widget .rw-stop-btn:hover {
+  background: rgba(246,70,93,0.20);
+}
+
+/* --- Position Input Form --- */
+
+#liq-risk-widget .rw-form {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#liq-risk-widget .rw-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#liq-risk-widget .rw-form-row {
+  display: flex;
+  gap: 10px;
+}
+
+#liq-risk-widget .rw-form-half {
+  flex: 1;
+}
+
+#liq-risk-widget .rw-form-label {
+  font-size: 11px;
+  color: #848E9C;
+  font-weight: 500;
+}
+
+#liq-risk-widget .rw-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: #2B3139;
+  border: 1px solid #363C45;
+  border-radius: 2px;
+  color: #EAECEF;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+#liq-risk-widget .rw-input:focus {
+  border-color: #F0B90B;
+}
+
+#liq-risk-widget .rw-input::placeholder {
+  color: #5E6673;
+}
+
+#liq-risk-widget .rw-input-sm {
+  text-align: center;
+  padding: 0 6px;
+}
+
+#liq-risk-widget .rw-input::-webkit-inner-spin-button,
+#liq-risk-widget .rw-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#liq-risk-widget .rw-leverage-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#liq-risk-widget .rw-leverage-x {
+  font-size: 13px;
+  font-weight: 600;
+  color: #848E9C;
+}
+
+#liq-risk-widget .rw-side-toggle {
+  display: flex;
+  height: 32px;
+  border: 1px solid #363C45;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#liq-risk-widget .rw-side-btn {
+  flex: 1;
+  border: none;
+  background: #2B3139;
+  color: #848E9C;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+#liq-risk-widget .rw-side-btn.active[data-side="LONG"] {
+  background: rgba(14,203,129,0.15);
+  color: #0ECB81;
+}
+
+#liq-risk-widget .rw-side-btn.active[data-side="SHORT"] {
+  background: rgba(246,70,93,0.15);
+  color: #F6465D;
+}
+
+#liq-risk-widget .rw-side-btn:hover:not(.active) {
+  background: #363C45;
+}
+
+#liq-risk-widget .rw-submit-btn {
+  height: 36px;
+  background: #F0B90B;
+  color: #181A20;
+  border: none;
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 2px;
+  transition: background 0.15s;
+}
+
+#liq-risk-widget .rw-submit-btn:hover {
+  background: #D4A30A;
+}
+
+#liq-risk-widget .rw-form-error {
+  font-size: 11px;
+  color: #F6465D;
+  min-height: 14px;
+  text-align: center;
+}

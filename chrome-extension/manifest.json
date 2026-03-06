@@ -17,8 +17,6 @@
         "https://*.binance.bh/*"
       ],
       "js": [
-        "content/liquidation-calc.js",
-        "content/histogram-renderer.js",
         "content/risk-widget-renderer.js",
         "content/stomp-client.js",
         "content/content.js"
