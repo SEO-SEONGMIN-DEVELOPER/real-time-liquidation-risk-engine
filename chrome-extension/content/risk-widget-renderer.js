@@ -37,6 +37,8 @@ const RiskWidgetRenderer = (() => {
   let resizeStartW = 0;
   let resizeStartH = 0;
 
+  const t = (key) => I18n.get(key);
+
   function getRiskColor(level) {
     switch (level) {
       case 'CRITICAL': return { text: C.critical, bg: C.criticalBg };
@@ -102,6 +104,8 @@ const RiskWidgetRenderer = (() => {
     setupResize();
     setupClose();
     setupForm();
+    setupDetailToggle();
+    applyI18n();
     showFormView();
   }
 
@@ -110,36 +114,36 @@ const RiskWidgetRenderer = (() => {
       <div class="rw-header">
         <div class="rw-header-left">
           <span class="rw-icon">&#9888;</span>
-          <span class="rw-title">Cascade Risk</span>
+          <span class="rw-title" data-i18n="title"></span>
         </div>
         <button class="rw-close">&times;</button>
       </div>
       <div class="rw-form" id="rw-form">
         <div class="rw-form-group">
-          <label class="rw-form-label">Symbol</label>
+          <label class="rw-form-label" data-i18n="symbol"></label>
           <input type="text" id="rw-input-symbol" class="rw-input" placeholder="BTCUSDT" spellcheck="false" />
         </div>
         <div class="rw-form-group">
-          <label class="rw-form-label">Liquidation Price</label>
+          <label class="rw-form-label" data-i18n="liqPrice"></label>
           <input type="number" id="rw-input-liq-price" class="rw-input" placeholder="0.00" step="any" />
         </div>
         <div class="rw-form-row">
           <div class="rw-form-group rw-form-half">
-            <label class="rw-form-label">Side</label>
+            <label class="rw-form-label" data-i18n="side"></label>
             <div class="rw-side-toggle" id="rw-side-toggle">
               <button class="rw-side-btn active" data-side="LONG">Long</button>
               <button class="rw-side-btn" data-side="SHORT">Short</button>
             </div>
           </div>
           <div class="rw-form-group rw-form-half">
-            <label class="rw-form-label">Leverage</label>
+            <label class="rw-form-label" data-i18n="leverage"></label>
             <div class="rw-leverage-wrap">
               <input type="number" id="rw-input-leverage" class="rw-input rw-input-sm" value="20" min="1" max="125" />
-              <span class="rw-leverage-x">×</span>
+              <span class="rw-leverage-x">&times;</span>
             </div>
           </div>
         </div>
-        <button class="rw-submit-btn" id="rw-submit-btn">Start Monitoring</button>
+        <button class="rw-submit-btn" id="rw-submit-btn" data-i18n="startMonitoring"></button>
         <div class="rw-form-error" id="rw-form-error"></div>
       </div>
     `;
@@ -150,110 +154,125 @@ const RiskWidgetRenderer = (() => {
       <div class="rw-monitor-header" id="rw-monitor-header" style="display:none">
         <div class="rw-header-left">
           <span class="rw-icon">&#9888;</span>
-          <span class="rw-title">Cascade Risk</span>
+          <span class="rw-title" data-i18n="title"></span>
         </div>
         <div class="rw-header-right">
-          <button class="rw-stop-btn" id="rw-stop-btn">Stop</button>
+          <button class="rw-stop-btn" id="rw-stop-btn" data-i18n="stop"></button>
           <button class="rw-close">&times;</button>
         </div>
       </div>
       <div class="rw-body" id="rw-body" style="display:none">
+        <!-- Basic View -->
         <div class="rw-risk-badge-row">
           <div class="rw-risk-badge" id="rw-risk-badge">--</div>
           <div class="rw-reach-prob">
-            <span class="rw-label">Reach Prob.</span>
+            <span class="rw-label" data-i18n="reachProb"></span>
             <span class="rw-value" id="rw-reach-prob">--%</span>
           </div>
         </div>
         <div class="rw-divider"></div>
-        <div class="rw-gauge-section">
-          <div class="rw-gauge-header">
-            <span class="rw-label">Density Score</span>
-            <span class="rw-value-sm" id="rw-density-val">--</span>
-          </div>
-          <div class="rw-gauge-bar">
-            <div class="rw-gauge-fill" id="rw-density-fill"></div>
-          </div>
-          <div class="rw-gauge-labels">
-            <span>Wall</span><span>Thick</span><span>Moderate</span><span>Sparse</span><span>Thin</span>
-          </div>
-        </div>
-        <div class="rw-divider"></div>
         <div class="rw-grid">
           <div class="rw-grid-item">
-            <span class="rw-label">Distance</span>
+            <span class="rw-label" data-i18n="distance"></span>
             <span class="rw-value" id="rw-distance">--</span>
           </div>
           <div class="rw-grid-item">
-            <span class="rw-label">Direction</span>
+            <span class="rw-label" data-i18n="direction"></span>
             <span class="rw-value" id="rw-direction">--</span>
           </div>
           <div class="rw-grid-item">
-            <span class="rw-label">Liq. Price</span>
+            <span class="rw-label" data-i18n="liqPriceLabel"></span>
             <span class="rw-value" id="rw-liq-price">--</span>
           </div>
           <div class="rw-grid-item">
-            <span class="rw-label">Current</span>
+            <span class="rw-label" data-i18n="current"></span>
             <span class="rw-value" id="rw-current-price">--</span>
           </div>
         </div>
-        <div class="rw-divider"></div>
-        <div class="rw-section-title">Order Book Path</div>
-        <div class="rw-grid">
-          <div class="rw-grid-item">
-            <span class="rw-label">Depth</span>
-            <span class="rw-value" id="rw-depth">--</span>
-          </div>
-          <div class="rw-grid-item">
-            <span class="rw-label">Notional</span>
-            <span class="rw-value" id="rw-notional">--</span>
-          </div>
-          <div class="rw-grid-item">
-            <span class="rw-label">Levels</span>
-            <span class="rw-value" id="rw-levels">--</span>
-          </div>
-          <div class="rw-grid-item">
-            <span class="rw-label">Depth Ratio</span>
-            <span class="rw-value" id="rw-depth-ratio">--</span>
-          </div>
+        <!-- Detail Toggle -->
+        <div class="rw-detail-toggle" id="rw-detail-toggle">
+          <span class="rw-detail-toggle-text" data-i18n="details"></span>
+          <span class="rw-detail-toggle-arrow" id="rw-detail-arrow">&#9660;</span>
         </div>
-        <div class="rw-divider"></div>
-        <div class="rw-section-title">Liquidation Clusters</div>
-        <div class="rw-cluster-list" id="rw-cluster-list">
-          <div class="rw-no-data">No clusters in range</div>
-        </div>
-        <div class="rw-divider"></div>
-        <div class="rw-section-title">Market Pressure</div>
-        <div class="rw-pressure-row">
-          <div class="rw-pressure-item">
-            <div class="rw-pressure-bar-wrap">
-              <div class="rw-pressure-bar" id="rw-oi-bar"></div>
+        <!-- Detail View (collapsed by default) -->
+        <div class="rw-detail" id="rw-detail" style="display:none">
+          <div class="rw-gauge-section">
+            <div class="rw-gauge-header">
+              <span class="rw-label" data-i18n="densityScore"></span>
+              <span class="rw-value-sm" id="rw-density-val">--</span>
             </div>
-            <span class="rw-pressure-label">OI</span>
-            <span class="rw-pressure-val" id="rw-oi-val">--</span>
-          </div>
-          <div class="rw-pressure-item">
-            <div class="rw-pressure-bar-wrap">
-              <div class="rw-pressure-bar" id="rw-liq-bar"></div>
+            <div class="rw-gauge-bar">
+              <div class="rw-gauge-fill" id="rw-density-fill"></div>
             </div>
-            <span class="rw-pressure-label">Liq</span>
-            <span class="rw-pressure-val" id="rw-liq-val">--</span>
-          </div>
-          <div class="rw-pressure-item">
-            <div class="rw-pressure-bar-wrap">
-              <div class="rw-pressure-bar" id="rw-imb-bar"></div>
+            <div class="rw-gauge-labels">
+              <span>Wall</span><span>Thick</span><span>Moderate</span><span>Sparse</span><span>Thin</span>
             </div>
-            <span class="rw-pressure-label">Imbal</span>
-            <span class="rw-pressure-val" id="rw-imb-val">--</span>
           </div>
-        </div>
-        <div class="rw-pressure-total">
-          <span class="rw-label">Total Pressure</span>
-          <span class="rw-value" id="rw-pressure-total">--<span class="rw-sub">/60</span></span>
+          <div class="rw-divider"></div>
+          <div class="rw-section-title" data-i18n="orderBookPath"></div>
+          <div class="rw-grid">
+            <div class="rw-grid-item">
+              <span class="rw-label" data-i18n="depth"></span>
+              <span class="rw-value" id="rw-depth">--</span>
+            </div>
+            <div class="rw-grid-item">
+              <span class="rw-label" data-i18n="notional"></span>
+              <span class="rw-value" id="rw-notional">--</span>
+            </div>
+            <div class="rw-grid-item">
+              <span class="rw-label" data-i18n="levels"></span>
+              <span class="rw-value" id="rw-levels">--</span>
+            </div>
+            <div class="rw-grid-item">
+              <span class="rw-label" data-i18n="depthRatio"></span>
+              <span class="rw-value" id="rw-depth-ratio">--</span>
+            </div>
+          </div>
+          <div class="rw-divider"></div>
+          <div class="rw-section-title" data-i18n="liqClusters"></div>
+          <div class="rw-cluster-list" id="rw-cluster-list">
+            <div class="rw-no-data" data-i18n="noClusters"></div>
+          </div>
+          <div class="rw-divider"></div>
+          <div class="rw-section-title" data-i18n="marketPressure"></div>
+          <div class="rw-pressure-row">
+            <div class="rw-pressure-item">
+              <div class="rw-pressure-bar-wrap">
+                <div class="rw-pressure-bar" id="rw-oi-bar"></div>
+              </div>
+              <span class="rw-pressure-label">OI</span>
+              <span class="rw-pressure-val" id="rw-oi-val">--</span>
+            </div>
+            <div class="rw-pressure-item">
+              <div class="rw-pressure-bar-wrap">
+                <div class="rw-pressure-bar" id="rw-liq-bar"></div>
+              </div>
+              <span class="rw-pressure-label">Liq</span>
+              <span class="rw-pressure-val" id="rw-liq-val">--</span>
+            </div>
+            <div class="rw-pressure-item">
+              <div class="rw-pressure-bar-wrap">
+                <div class="rw-pressure-bar" id="rw-imb-bar"></div>
+              </div>
+              <span class="rw-pressure-label">Imbal</span>
+              <span class="rw-pressure-val" id="rw-imb-val">--</span>
+            </div>
+          </div>
+          <div class="rw-pressure-total">
+            <span class="rw-label" data-i18n="totalPressure"></span>
+            <span class="rw-value" id="rw-pressure-total">--<span class="rw-sub">/60</span></span>
+          </div>
         </div>
       </div>
       <div class="rw-resize"></div>
     `;
+  }
+
+  function applyI18n() {
+    if (!widget) return;
+    widget.querySelectorAll('[data-i18n]').forEach(el => {
+      el.textContent = t(el.dataset.i18n);
+    });
   }
 
   function update(report) {
@@ -283,10 +302,10 @@ const RiskWidgetRenderer = (() => {
     widget.querySelector('#rw-distance').textContent = fmtPct(report.distancePercent);
     const dirEl = widget.querySelector('#rw-direction');
     if (report.direction === 'DOWN') {
-      dirEl.textContent = '▼ Down';
+      dirEl.textContent = t('dirDown');
       dirEl.style.color = C.red;
     } else if (report.direction === 'UP') {
-      dirEl.textContent = '▲ Up';
+      dirEl.textContent = t('dirUp');
       dirEl.style.color = C.green;
     } else {
       dirEl.textContent = '--';
@@ -345,7 +364,7 @@ const RiskWidgetRenderer = (() => {
   function renderClusters(clusters) {
     const list = widget.querySelector('#rw-cluster-list');
     if (!clusters || clusters.length === 0) {
-      list.innerHTML = '<div class="rw-no-data">No clusters in range</div>';
+      list.innerHTML = '<div class="rw-no-data">' + t('noClusters') + '</div>';
       return;
     }
 
@@ -389,8 +408,8 @@ const RiskWidgetRenderer = (() => {
       const leverage = parseInt(widget.querySelector('#rw-input-leverage').value) || 20;
       const errorEl = widget.querySelector('#rw-form-error');
 
-      if (!symbol) { errorEl.textContent = 'Symbol을 입력하세요'; return; }
-      if (!liqPrice || liqPrice <= 0) { errorEl.textContent = 'Liquidation Price를 입력하세요'; return; }
+      if (!symbol) { errorEl.textContent = t('errSymbol'); return; }
+      if (!liqPrice || liqPrice <= 0) { errorEl.textContent = t('errLiqPrice'); return; }
       errorEl.textContent = '';
 
       if (onRegisterCallback) {
@@ -403,6 +422,20 @@ const RiskWidgetRenderer = (() => {
     const url = window.location.pathname;
     const match = url.match(/\/futures\/(\w+)/i);
     if (match) symbolInput.value = match[1].toUpperCase();
+  }
+
+  function setupDetailToggle() {
+    const toggle = widget.querySelector('#rw-detail-toggle');
+    const detail = widget.querySelector('#rw-detail');
+    const arrow = widget.querySelector('#rw-detail-arrow');
+    if (!toggle || !detail) return;
+
+    toggle.addEventListener('click', () => {
+      const isOpen = detail.style.display !== 'none';
+      detail.style.display = isOpen ? 'none' : '';
+      arrow.innerHTML = isOpen ? '&#9660;' : '&#9650;';
+      toggle.classList.toggle('open', !isOpen);
+    });
   }
 
   function showFormView() {
@@ -517,5 +550,5 @@ const RiskWidgetRenderer = (() => {
   function hide() { if (widget) widget.style.display = 'none'; }
   function isCreated() { return !!widget; }
 
-  return { create, update, show, hide, isCreated };
+  return { create, update, applyI18n, show, hide, isCreated };
 })();
