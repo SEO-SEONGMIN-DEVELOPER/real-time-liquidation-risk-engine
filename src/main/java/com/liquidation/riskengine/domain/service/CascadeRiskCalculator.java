@@ -20,6 +20,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -31,6 +35,13 @@ public class CascadeRiskCalculator {
     private static final MathContext MC = new MathContext(8, RoundingMode.HALF_UP);
     private static final Duration RECENT_LIQ_WINDOW = Duration.ofMinutes(30);
 
+    private static final AtomicInteger THREAD_COUNTER = new AtomicInteger(0);
+    private static final ExecutorService ANALYSIS_POOL = Executors.newFixedThreadPool(3, r -> {
+        Thread t = new Thread(r, "risk-analysis-" + THREAD_COUNTER.incrementAndGet());
+        t.setDaemon(true);
+        return t;
+    });
+
     public CascadeRiskReport fullAnalysis(
             BigDecimal currentPrice,
             BigDecimal userLiquidationPrice,
@@ -41,16 +52,23 @@ public class CascadeRiskCalculator {
         CascadeRiskReport report = analyzeDistance(currentPrice, userLiquidationPrice, positionSide, symbol);
 
         OrderBookSnapshot orderBook = state.getLatestOrderBook(symbol);
-        if (orderBook != null) {
-            analyzeOrderBookDensity(report, orderBook);
-        }
-
         OpenInterestSnapshot latestOi = state.getLatestOpenInterest(symbol);
         BigDecimal totalOi = latestOi != null ? latestOi.getOpenInterest() : null;
-        mapLiquidationClusters(report, totalOi);
-
         List<LiquidationEvent> recentLiqs = state.getRecentLiquidations(symbol, RECENT_LIQ_WINDOW);
-        analyzeMarketPressure(report, latestOi, recentLiqs, orderBook);
+
+        CompletableFuture<Void> densityFuture = CompletableFuture.runAsync(() -> {
+            if (orderBook != null) {
+                analyzeOrderBookDensity(report, orderBook);
+            }
+        }, ANALYSIS_POOL);
+
+        CompletableFuture<Void> clusterFuture = CompletableFuture.runAsync(
+                () -> mapLiquidationClusters(report, totalOi), ANALYSIS_POOL);
+
+        CompletableFuture<Void> pressureFuture = CompletableFuture.runAsync(
+                () -> analyzeMarketPressure(report, latestOi, recentLiqs, orderBook), ANALYSIS_POOL);
+
+        CompletableFuture.allOf(densityFuture, clusterFuture, pressureFuture).join();
 
         synthesize(report);
 

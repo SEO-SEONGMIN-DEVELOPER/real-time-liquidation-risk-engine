@@ -45,6 +45,9 @@ dependencies {
     // LMAX Disruptor (high-performance inter-thread messaging)
     implementation 'com.lmax:disruptor:4.0.0'
 
+    // Micrometer Prometheus Registry (메트릭 수출)
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     // Jackson (JSON 파싱)
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 

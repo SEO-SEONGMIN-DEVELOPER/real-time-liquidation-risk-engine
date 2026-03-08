@@ -6,6 +6,9 @@ import com.liquidation.riskengine.infra.binance.client.BinanceRestClient;
 import com.liquidation.riskengine.infra.binance.config.BinanceProperties;
 import com.liquidation.riskengine.infra.disruptor.event.EventType;
 import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,14 +26,35 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class OpenInterestPoller {
 
+    private static final double BACKPRESSURE_THRESHOLD = 0.9;
+
     private final BinanceRestClient restClient;
     private final BinanceProperties properties;
     private final RingBuffer<MarketDataEvent> marketDataRingBuffer;
+    private final MeterRegistry meterRegistry;
 
     private final Map<String, BigDecimal> previousOiMap = new ConcurrentHashMap<>();
 
+    private Counter backpressureDropCounter;
+
+    @PostConstruct
+    void initMetrics() {
+        backpressureDropCounter = Counter.builder("disruptor.events.dropped")
+                .tag("reason", "backpressure")
+                .tag("source", "oi-poller")
+                .description("OI events dropped due to RingBuffer backpressure")
+                .register(meterRegistry);
+    }
+
     @Scheduled(fixedDelayString = "${binance.open-interest-poll-interval-ms:3000}")
     public void pollOpenInterest() {
+        if (isBackpressureActive()) {
+            backpressureDropCounter.increment();
+            log.warn("[OI Poll] 백프레셔 활성 - OI 폴링 스킵 (util={}%)",
+                    String.format("%.1f", getRingBufferUtilization() * 100));
+            return;
+        }
+
         for (String symbol : properties.getSymbols()) {
             restClient.getOpenInterest(symbol).ifPresent(response -> {
                 String upperSymbol = symbol.toUpperCase();
@@ -70,5 +94,13 @@ public class OpenInterestPoller {
                         upperSymbol, currentOi, change, changePercent);
             });
         }
+    }
+
+    private boolean isBackpressureActive() {
+        return getRingBufferUtilization() > BACKPRESSURE_THRESHOLD;
+    }
+
+    private double getRingBufferUtilization() {
+        return 1.0 - ((double) marketDataRingBuffer.remainingCapacity() / marketDataRingBuffer.getBufferSize());
     }
 }
