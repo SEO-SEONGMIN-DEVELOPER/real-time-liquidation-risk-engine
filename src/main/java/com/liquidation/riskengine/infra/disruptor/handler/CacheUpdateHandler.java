@@ -4,6 +4,7 @@ import com.lmax.disruptor.EventHandler;
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
 import com.liquidation.riskengine.domain.service.LeverageDistributionService;
 import com.liquidation.riskengine.domain.service.MarkPriceCache;
+import com.liquidation.riskengine.domain.service.PriceHistoryBuffer;
 import com.liquidation.riskengine.domain.service.RiskStateManager;
 import com.liquidation.riskengine.infra.binance.dto.MarkPriceEvent;
 import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
@@ -19,6 +20,7 @@ import java.math.BigDecimal;
 public class CacheUpdateHandler implements EventHandler<MarketDataEvent> {
 
     private final MarkPriceCache markPriceCache;
+    private final PriceHistoryBuffer priceHistoryBuffer;
     private final LeverageDistributionService leverageDistributionService;
     private final RiskStateManager riskStateManager;
 
@@ -40,6 +42,7 @@ public class CacheUpdateHandler implements EventHandler<MarketDataEvent> {
         if (mp == null) return;
 
         markPriceCache.update(mp.getSymbol(), mp.getMarkPrice());
+        priceHistoryBuffer.record(mp.getSymbol(), mp.getMarkPrice(), mp.getEventTime());
         log.debug("[Cache] MARK_PRICE 갱신: symbol={}, price={}", mp.getSymbol(), mp.getMarkPrice());
     }
 
