@@ -1,7 +1,8 @@
 package com.liquidation.riskengine.domain.service.montecarlo;
 
-import com.liquidation.riskengine.domain.model.MonteCarloResult;
-import com.liquidation.riskengine.domain.model.MonteCarloResult.HorizonResult;
+import com.liquidation.riskengine.domain.model.MonteCarloReport;
+import com.liquidation.riskengine.domain.model.MonteCarloReport.HorizonResult;
+import com.liquidation.riskengine.domain.model.MonteCarloReport.McRiskLevel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -14,17 +15,19 @@ import java.util.List;
 public class LiquidationDetector {
 
     static final int[] DEFAULT_HORIZON_MINUTES = {10, 60, 240, 1440};
+    private static final int RISK_LEVEL_HORIZON = 1440;
 
-    public MonteCarloResult detect(String symbol, double[][] paths,
+    public MonteCarloReport detect(String symbol, double[][] paths,
                                    double liquidationPrice, String positionSide,
-                                   int timeStepMinutes) {
+                                   double sigma, int timeStepMinutes) {
         return detect(symbol, paths, liquidationPrice, positionSide,
-                timeStepMinutes, DEFAULT_HORIZON_MINUTES);
+                sigma, timeStepMinutes, DEFAULT_HORIZON_MINUTES);
     }
 
-    public MonteCarloResult detect(String symbol, double[][] paths,
+    public MonteCarloReport detect(String symbol, double[][] paths,
                                    double liquidationPrice, String positionSide,
-                                   int timeStepMinutes, int[] horizonMinutes) {
+                                   double sigma, int timeStepMinutes,
+                                   int[] horizonMinutes) {
         int pathCount = paths.length;
         int totalSteps = paths[0].length - 1;
         boolean isLong = "LONG".equalsIgnoreCase(positionSide);
@@ -39,18 +42,24 @@ public class LiquidationDetector {
             horizonResults.add(aggregateHorizon(paths, firstPassageStep, step, horizonMin, pathCount));
         }
 
-        long elapsedMs = (System.nanoTime() - startNano) / 1_000_000;
-        log.debug("[LiqDetector] 감지 완료: symbol={}, side={}, liqPrice={}, paths={}, elapsed={}ms",
-                symbol, positionSide, liquidationPrice, pathCount, elapsedMs);
+        long calcDurationMicros = (System.nanoTime() - startNano) / 1_000;
 
-        return MonteCarloResult.builder()
+        McRiskLevel riskLevel = deriveRiskLevel(horizonResults);
+
+        log.debug("[LiqDetector] 감지 완료: symbol={}, side={}, liqPrice={}, riskLevel={}, elapsed={}μs",
+                symbol, positionSide, liquidationPrice, riskLevel, calcDurationMicros);
+
+        return MonteCarloReport.builder()
                 .symbol(symbol)
-                .positionSide(positionSide)
                 .currentPrice(paths[0][0])
                 .liquidationPrice(liquidationPrice)
+                .positionSide(positionSide)
+                .sigma(sigma)
                 .pathCount(pathCount)
                 .horizons(horizonResults)
+                .riskLevel(riskLevel)
                 .timestamp(System.currentTimeMillis())
+                .calcDurationMicros(calcDurationMicros)
                 .build();
     }
 
@@ -88,16 +97,23 @@ public class LiquidationDetector {
         Arrays.sort(pricesAtStep);
 
         return HorizonResult.builder()
-                .label(formatLabel(horizonMinutes))
                 .minutes(horizonMinutes)
                 .liquidationProbability((double) liquidatedCount / pathCount)
-                .liquidatedPaths(liquidatedCount)
-                .pct5(percentile(pricesAtStep, 5))
-                .pct25(percentile(pricesAtStep, 25))
-                .pct50(percentile(pricesAtStep, 50))
-                .pct75(percentile(pricesAtStep, 75))
-                .pct95(percentile(pricesAtStep, 95))
+                .pricePercentile5(percentile(pricesAtStep, 5))
+                .pricePercentile25(percentile(pricesAtStep, 25))
+                .priceMedian(percentile(pricesAtStep, 50))
+                .pricePercentile75(percentile(pricesAtStep, 75))
+                .pricePercentile95(percentile(pricesAtStep, 95))
                 .build();
+    }
+
+    private McRiskLevel deriveRiskLevel(List<HorizonResult> horizons) {
+        return horizons.stream()
+                .filter(h -> h.getMinutes() == RISK_LEVEL_HORIZON)
+                .findFirst()
+                .map(h -> McRiskLevel.fromProbability(h.getLiquidationProbability()))
+                .orElse(McRiskLevel.fromProbability(
+                        horizons.getLast().getLiquidationProbability()));
     }
 
     private double percentile(double[] sorted, int p) {
@@ -106,11 +122,5 @@ public class LiquidationDetector {
         int upper = Math.min(lower + 1, sorted.length - 1);
         double fraction = index - lower;
         return sorted[lower] + fraction * (sorted[upper] - sorted[lower]);
-    }
-
-    private String formatLabel(int minutes) {
-        if (minutes < 60) return minutes + "m";
-        if (minutes < 1440) return (minutes / 60) + "h";
-        return (minutes / 1440) + "d";
     }
 }
