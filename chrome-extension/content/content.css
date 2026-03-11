@@ -288,6 +288,24 @@
   margin-bottom: 6px;
 }
 
+#liq-risk-widget .rw-section-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: #F0B90B;
+  text-align: center;
+  padding: 6px 0 4px;
+  margin-top: 25px;
+  margin-bottom: 8px;
+  background: rgba(240, 185, 11, 0.08);
+  border-top: 3px solid #F0B90B;
+  border-radius: 0 0 3px 3px;
+  letter-spacing: 0.5px;
+}
+
+#liq-risk-widget .rw-section-subtitle:first-child {
+  margin-top: 0;
+}
+
 #liq-risk-widget .rw-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -668,4 +686,105 @@
   color: #F6465D;
   min-height: 14px;
   text-align: center;
+}
+
+#liq-risk-widget .rw-mc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#liq-risk-widget .rw-mc-no-data {
+  font-size: 11px;
+  color: #5E6673;
+  text-align: center;
+  padding: 4px 0;
+}
+
+#liq-risk-widget .rw-mc-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#liq-risk-widget .rw-mc-risk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#liq-risk-widget .rw-mc-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+#liq-risk-widget .rw-mc-horizons {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#liq-risk-widget .rw-mc-horizon-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 16px;
+}
+
+#liq-risk-widget .rw-mc-horizon-label {
+  width: 36px;
+  font-size: 10px;
+  color: #848E9C;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+#liq-risk-widget .rw-mc-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: #2B3139;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#liq-risk-widget .rw-mc-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease, background 0.5s ease;
+  min-width: 1px;
+}
+
+#liq-risk-widget .rw-mc-prob {
+  width: 38px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+#liq-risk-widget .rw-mc-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #2B3139;
+}
+
+#liq-risk-widget .rw-mc-meta-val {
+  font-size: 11px;
+  font-weight: 500;
+  color: #EAECEF;
+}
+
+#liq-risk-widget .rw-mc-meta-sep {
+  font-size: 10px;
+  color: #5E6673;
+  margin: 0 2px;
 }

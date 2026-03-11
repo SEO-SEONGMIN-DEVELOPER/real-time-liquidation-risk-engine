@@ -162,7 +162,27 @@ const RiskWidgetRenderer = (() => {
         </div>
       </div>
       <div class="rw-body" id="rw-body" style="display:none">
-        <!-- Basic View -->
+        <!-- Section: Future Risk (MC) -->
+        <div class="rw-section-subtitle" data-i18n="sectionFuture"></div>
+        <div class="rw-mc-section" id="rw-mc-section">
+          <div class="rw-mc-no-data" id="rw-mc-no-data" data-i18n="mcNoData"></div>
+          <div class="rw-mc-content" id="rw-mc-content" style="display:none">
+            <div class="rw-mc-risk-row">
+              <span class="rw-label" data-i18n="mcRisk"></span>
+              <span class="rw-mc-risk-badge" id="rw-mc-risk-badge">--</span>
+            </div>
+            <div class="rw-mc-horizons" id="rw-mc-horizons"></div>
+            <div class="rw-mc-meta" id="rw-mc-meta">
+              <span class="rw-label" data-i18n="mcVolatility"></span>
+              <span class="rw-mc-meta-val" id="rw-mc-sigma">--</span>
+              <span class="rw-mc-meta-sep">·</span>
+              <span class="rw-label" data-i18n="mcPaths"></span>
+              <span class="rw-mc-meta-val" id="rw-mc-paths">--</span>
+            </div>
+          </div>
+        </div>
+        <!-- Section: Current Risk (Cascade) -->
+        <div class="rw-section-subtitle" data-i18n="sectionCurrent"></div>
         <div class="rw-risk-badge-row">
           <div class="rw-risk-badge" id="rw-risk-badge">--</div>
           <div class="rw-reach-prob">
@@ -546,9 +566,76 @@ const RiskWidgetRenderer = (() => {
     });
   }
 
+  function getMcProbColor(prob) {
+    if (prob >= 0.50) return C.critical;
+    if (prob >= 0.25) return C.high;
+    if (prob >= 0.10) return C.orange;
+    return C.green;
+  }
+
+  function getMcHorizonLabel(minutes) {
+    if (minutes <= 10) return t('mc10m');
+    if (minutes <= 60) return t('mc1h');
+    if (minutes <= 240) return t('mc4h');
+    return t('mc24h');
+  }
+
+  function updateMc(mcReport) {
+    if (!widget || !mcReport) return;
+
+    const noData = widget.querySelector('#rw-mc-no-data');
+    const content = widget.querySelector('#rw-mc-content');
+    if (noData) noData.style.display = 'none';
+    if (content) content.style.display = '';
+
+    const riskBadge = widget.querySelector('#rw-mc-risk-badge');
+    if (riskBadge && mcReport.riskLevel) {
+      const rc = getRiskColor(mcReport.riskLevel);
+      riskBadge.textContent = mcReport.riskLevel;
+      riskBadge.style.color = rc.text;
+      riskBadge.style.background = rc.bg;
+      riskBadge.style.borderColor = rc.text;
+    }
+
+    const horizonsEl = widget.querySelector('#rw-mc-horizons');
+    if (horizonsEl && mcReport.horizons) {
+      horizonsEl.innerHTML = mcReport.horizons.map(h => {
+        const prob = h.liquidationProbability || 0;
+        const pct = (prob * 100).toFixed(1);
+        const barWidth = Math.max(1, Math.min(100, prob * 100));
+        const color = getMcProbColor(prob);
+        const label = getMcHorizonLabel(h.minutes);
+
+        return `
+          <div class="rw-mc-horizon-row">
+            <span class="rw-mc-horizon-label">${label}</span>
+            <div class="rw-mc-bar-wrap">
+              <div class="rw-mc-bar" style="width:${barWidth}%;background:${color}"></div>
+            </div>
+            <span class="rw-mc-prob" style="color:${color}">${pct}%</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    const sigmaEl = widget.querySelector('#rw-mc-sigma');
+    if (sigmaEl) {
+      sigmaEl.textContent = mcReport.sigma !== undefined
+        ? (mcReport.sigma * 100).toFixed(1) + '%/yr'
+        : '--';
+    }
+
+    const pathsEl = widget.querySelector('#rw-mc-paths');
+    if (pathsEl) {
+      pathsEl.textContent = mcReport.pathCount !== undefined
+        ? (mcReport.pathCount >= 1000 ? (mcReport.pathCount / 1000).toFixed(0) + 'K' : mcReport.pathCount)
+        : '--';
+    }
+  }
+
   function show() { if (widget) widget.style.display = 'flex'; }
   function hide() { if (widget) widget.style.display = 'none'; }
   function isCreated() { return !!widget; }
 
-  return { create, update, applyI18n, show, hide, isCreated };
+  return { create, update, updateMc, applyI18n, show, hide, isCreated };
 })();
