@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UserPosition {
 
+    private String userId;
     private String symbol;
     private BigDecimal liquidationPrice;
     private String positionSide;

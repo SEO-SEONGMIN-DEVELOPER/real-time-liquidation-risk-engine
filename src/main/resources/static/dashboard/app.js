@@ -50,6 +50,18 @@
   let riskSubscription = null;
   let mcSubscription = null;
   let activeSymbol = null;
+  let activeUserId = null;
+
+  function getOrCreateUserId() {
+    const storageKey = "risk-engine-user-id";
+    const existing = localStorage.getItem(storageKey);
+    if (existing && existing.trim()) {
+      return existing.trim().toLowerCase();
+    }
+    const generated = `u-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(storageKey, generated);
+    return generated;
+  }
 
   function setActiveLangBtn() {
     const lang = DashboardI18n.getLang();
@@ -257,11 +269,11 @@
     }
   }
 
-  function subscribeSymbol(symbol) {
+  function subscribeSymbol(userId, symbol) {
     if (!stompClient || !stompClient.connected) return;
     unsubscribeAll();
 
-    riskSubscription = stompClient.subscribe(`/topic/risk/${symbol}`, (message) => {
+    riskSubscription = stompClient.subscribe(`/topic/risk/${userId}/${symbol}`, (message) => {
       try {
         updateCascadeReport(JSON.parse(message.body));
       } catch (err) {
@@ -269,7 +281,7 @@
       }
     });
 
-    mcSubscription = stompClient.subscribe(`/topic/mc/${symbol}`, (message) => {
+    mcSubscription = stompClient.subscribe(`/topic/mc/${userId}/${symbol}`, (message) => {
       try {
         updateMcReport(JSON.parse(message.body));
       } catch (err) {
@@ -292,10 +304,13 @@
     return data;
   }
 
-  async function unregisterPosition(symbol) {
-    await fetch(`${BACKEND_BASE_URL}/api/position/unregister?symbol=${encodeURIComponent(symbol)}`, {
+  async function unregisterPosition(userId, symbol) {
+    await fetch(
+      `${BACKEND_BASE_URL}/api/position/unregister?userId=${encodeURIComponent(userId)}&symbol=${encodeURIComponent(symbol)}`,
+      {
       method: "DELETE"
-    });
+      }
+    );
   }
 
   async function submitFeedback(payload) {
@@ -334,10 +349,12 @@
 
     try {
       await connectStomp();
-      const payload = { symbol, liquidationPrice, positionSide, leverage };
+      const userId = getOrCreateUserId();
+      const payload = { userId, symbol, liquidationPrice, positionSide, leverage };
       await registerPosition(payload);
+      activeUserId = userId;
       activeSymbol = symbol;
-      subscribeSymbol(symbol);
+      subscribeSymbol(userId, symbol);
       el.stopBtn.disabled = false;
       showMonitorView(payload);
       setMessage(t("msgStarted", { symbol }), "success");
@@ -349,13 +366,14 @@
   }
 
   async function handleStop() {
-    if (!activeSymbol) return;
+    if (!activeSymbol || !activeUserId) return;
     el.stopBtn.disabled = true;
     try {
-      await unregisterPosition(activeSymbol);
+      await unregisterPosition(activeUserId, activeSymbol);
       unsubscribeAll();
       setMessage(t("msgStopped", { symbol: activeSymbol }), "success");
       activeSymbol = null;
+      activeUserId = null;
       showSetupView();
     } catch (error) {
       setMessage(error.message || t("msgStopFailed"), "error");

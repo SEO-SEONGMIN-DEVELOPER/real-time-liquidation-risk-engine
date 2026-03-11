@@ -29,7 +29,8 @@ public class MonteCarloSimulationService {
     private final DriftEstimator driftEstimator;
     private final TailEstimator tailEstimator;
 
-    private final Map<String, MonteCarloReport> latestReports = new ConcurrentHashMap<>();
+    private final Map<String, MonteCarloReport> latestReportsBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, MonteCarloReport> latestReportsByUserAndSymbol = new ConcurrentHashMap<>();
 
     public Optional<MonteCarloReport> simulate(String symbol,
                                                BigDecimal liquidationPrice,
@@ -38,6 +39,21 @@ public class MonteCarloSimulationService {
     }
 
     public Optional<MonteCarloReport> simulate(String symbol,
+                                               BigDecimal liquidationPrice,
+                                               String positionSide,
+                                               CascadeRiskReport cascadeReport) {
+        return simulate(null, symbol, liquidationPrice, positionSide, cascadeReport);
+    }
+
+    public Optional<MonteCarloReport> simulate(String userId,
+                                               String symbol,
+                                               BigDecimal liquidationPrice,
+                                               String positionSide) {
+        return simulate(userId, symbol, liquidationPrice, positionSide, null);
+    }
+
+    public Optional<MonteCarloReport> simulate(String userId,
+                                               String symbol,
                                                BigDecimal liquidationPrice,
                                                String positionSide,
                                                CascadeRiskReport cascadeReport) {
@@ -115,11 +131,15 @@ public class MonteCarloSimulationService {
                 properties.horizonsArray());
 
         long totalMicros = (System.nanoTime() - startNano) / 1_000;
-        log.info("[MC] 시뮬레이션 완료: symbol={}, side={}, σ={:.4f}, μ={:.4f}, ν={:.1f}, cascade={}, risk={}, paths={}, total={}μs",
-                symbol, positionSide, sigma, mu, nu, cascadeReport != null,
+        log.info("[MC] 시뮬레이션 완료: userId={}, symbol={}, side={}, σ={:.4f}, μ={:.4f}, ν={:.1f}, cascade={}, risk={}, paths={}, total={}μs",
+                normalizeUserId(userId), symbol, positionSide, sigma, mu, nu, cascadeReport != null,
                 report.getRiskLevel(), properties.getPathCount(), totalMicros);
 
-        latestReports.put(symbol.toUpperCase(), report);
+        String normalizedSymbol = symbol.toUpperCase();
+        latestReportsBySymbol.put(normalizedSymbol, report);
+        if (userId != null && !userId.isBlank()) {
+            latestReportsByUserAndSymbol.put(userSymbolKey(userId, normalizedSymbol), report);
+        }
 
         return Optional.of(report);
     }
@@ -142,7 +162,12 @@ public class MonteCarloSimulationService {
 
     public Optional<MonteCarloReport> getLatest(String symbol) {
         if (symbol == null) return Optional.empty();
-        return Optional.ofNullable(latestReports.get(symbol.toUpperCase()));
+        return Optional.ofNullable(latestReportsBySymbol.get(symbol.toUpperCase()));
+    }
+
+    public Optional<MonteCarloReport> getLatest(String userId, String symbol) {
+        if (userId == null || userId.isBlank() || symbol == null) return Optional.empty();
+        return Optional.ofNullable(latestReportsByUserAndSymbol.get(userSymbolKey(userId, symbol.toUpperCase())));
     }
 
     private Duration parseVolatilityWindow(String label) {
@@ -154,5 +179,14 @@ public class MonteCarloSimulationService {
             case "24h" -> Duration.ofHours(24);
             default -> Duration.ofHours(1);
         };
+    }
+
+    private String userSymbolKey(String userId, String symbol) {
+        return normalizeUserId(userId) + "|" + symbol.toUpperCase();
+    }
+
+    private String normalizeUserId(String userId) {
+        if (userId == null || userId.isBlank()) return "system";
+        return userId.trim().toLowerCase();
     }
 }
