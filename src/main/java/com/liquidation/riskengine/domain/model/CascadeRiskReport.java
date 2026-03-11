@@ -18,6 +18,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CascadeRiskReport {
 
+    private String userId;
     private String symbol;
     private BigDecimal currentPrice;
     private BigDecimal userLiquidationPrice;

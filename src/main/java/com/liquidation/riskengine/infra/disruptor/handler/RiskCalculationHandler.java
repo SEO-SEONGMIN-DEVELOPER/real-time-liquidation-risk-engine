@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -50,8 +51,8 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
     private long throttleIntervalNs;
 
     private final Map<String, Long> lastCalcTimeBySymbol = new ConcurrentHashMap<>();
-    private final Map<String, Long> lastMcCalcTimeBySymbol = new ConcurrentHashMap<>();
-    private final Map<String, CascadeRiskReport> latestCascadeReports = new ConcurrentHashMap<>();
+    private final Map<String, Long> lastMcCalcTimeByUserAndSymbol = new ConcurrentHashMap<>();
+    private final Map<String, CascadeRiskReport> latestCascadeReportsByUserAndSymbol = new ConcurrentHashMap<>();
 
     private Timer riskCalcTimer;
     private Timer e2eLatencyTimer;
@@ -89,104 +90,119 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
         String symbol = event.getSymbol();
         if (symbol == null) return;
 
+        Collection<UserPosition> positions = riskStateManager.getPositionsBySymbol(symbol);
+        if (positions.isEmpty()) return;
+
         long now = System.nanoTime();
 
         if (event.getType() == EventType.MARK_PRICE) {
             Long lastCalc = lastCalcTimeBySymbol.get(symbol);
             if (lastCalc != null && (now - lastCalc) < throttleIntervalNs) {
                 throttledCounter.increment();
-                tryMonteCarlo(symbol, now);
+                for (UserPosition position : positions) {
+                    if (position.getUserId() == null || position.getUserId().isBlank()) continue;
+                    tryMonteCarlo(normalizeUserId(position.getUserId()), symbol, now, position);
+                }
                 return;
             }
         }
 
-        UserPosition position = riskStateManager.getPosition(symbol);
-        if (position == null) return;
-
         BigDecimal currentPrice = markPriceCache.get(symbol);
         if (currentPrice == null) return;
 
-        try {
-            long startNano = System.nanoTime();
-
-            CascadeRiskReport report = cascadeRiskCalculator.fullAnalysis(
-                    currentPrice,
-                    position.getLiquidationPrice(),
-                    position.getPositionSide(),
-                    symbol,
-                    riskStateManager);
-
-            long calcElapsed = System.nanoTime() - startNano;
-            lastCalcTimeBySymbol.put(symbol, System.nanoTime());
-
-            long e2eLatency = System.nanoTime() - event.getIngestNanoTime();
-
-            riskCalcTimer.record(calcElapsed, TimeUnit.NANOSECONDS);
-            e2eLatencyTimer.record(e2eLatency, TimeUnit.NANOSECONDS);
-            processedCounter.increment();
-
-            riskResultRingBuffer.publishEvent((resultEvent, seq) -> {
-                resultEvent.clear();
-                resultEvent.setReport(report);
-                resultEvent.setCalcNanoTime(calcElapsed);
-            });
-
-            latestCascadeReports.put(symbol.toUpperCase(), report);
-
-            try {
-                cascadeCalibrationLogger.logPrediction(report);
-            } catch (Exception ex) {
-                log.warn("[Cascade] 캘리브레이션 기록 실패: symbol={}", symbol, ex);
+        for (UserPosition position : positions) {
+            if (position.getLiquidationPrice() == null || position.getUserId() == null || position.getUserId().isBlank()) {
+                continue;
             }
 
-            log.debug("[RiskCalc] {} | risk={} | reachProb={}% | calc={}μs | e2e={}μs",
-                    symbol, report.getRiskLevel(),
-                    String.format("%.1f", report.getCascadeReachProbability()),
-                    calcElapsed / 1_000, e2eLatency / 1_000);
-        } catch (Exception e) {
-            log.error("[RiskCalc] 위험 계산 실패: symbol={}", symbol, e);
-        }
+            String userId = normalizeUserId(position.getUserId());
+            String userSymbolKey = userSymbolKey(userId, symbol);
 
-        tryMonteCarlo(symbol, now);
+            try {
+                long startNano = System.nanoTime();
+
+                CascadeRiskReport report = cascadeRiskCalculator.fullAnalysis(
+                        currentPrice,
+                        position.getLiquidationPrice(),
+                        position.getPositionSide(),
+                        symbol,
+                        riskStateManager);
+                report.setUserId(userId);
+
+                long calcElapsed = System.nanoTime() - startNano;
+                lastCalcTimeBySymbol.put(symbol, System.nanoTime());
+
+                long e2eLatency = System.nanoTime() - event.getIngestNanoTime();
+
+                riskCalcTimer.record(calcElapsed, TimeUnit.NANOSECONDS);
+                e2eLatencyTimer.record(e2eLatency, TimeUnit.NANOSECONDS);
+                processedCounter.increment();
+
+                riskResultRingBuffer.publishEvent((resultEvent, seq) -> {
+                    resultEvent.clear();
+                    resultEvent.setUserId(userId);
+                    resultEvent.setReport(report);
+                    resultEvent.setCalcNanoTime(calcElapsed);
+                });
+
+                latestCascadeReportsByUserAndSymbol.put(userSymbolKey, report);
+
+                try {
+                    cascadeCalibrationLogger.logPrediction(report);
+                } catch (Exception ex) {
+                    log.warn("[Cascade] 캘리브레이션 기록 실패: userId={}, symbol={}", userId, symbol, ex);
+                }
+
+                log.debug("[RiskCalc] userId={}, symbol={} | risk={} | reachProb={}% | calc={}μs | e2e={}μs",
+                        userId, symbol, report.getRiskLevel(),
+                        String.format("%.1f", report.getCascadeReachProbability()),
+                        calcElapsed / 1_000, e2eLatency / 1_000);
+            } catch (Exception e) {
+                log.error("[RiskCalc] 위험 계산 실패: userId={}, symbol={}", userId, symbol, e);
+            }
+
+            tryMonteCarlo(userId, symbol, now, position);
+        }
     }
 
-    private void tryMonteCarlo(String symbol, long nowNano) {
+    private void tryMonteCarlo(String userId, String symbol, long nowNano, UserPosition position) {
         if (!mcProperties.isEnabled()) return;
 
         long throttleNs = mcProperties.getThrottleIntervalSeconds() * 1_000_000_000L;
-        Long lastMc = lastMcCalcTimeBySymbol.get(symbol);
+        String userSymbolKey = userSymbolKey(userId, symbol);
+        Long lastMc = lastMcCalcTimeByUserAndSymbol.get(userSymbolKey);
         if (lastMc != null && (nowNano - lastMc) < throttleNs) {
             return;
         }
 
-        UserPosition position = riskStateManager.getPosition(symbol);
         if (position == null || position.getLiquidationPrice() == null) return;
 
         try {
-            CascadeRiskReport cascadeReport = latestCascadeReports.get(symbol.toUpperCase());
-            mcService.simulate(symbol, position.getLiquidationPrice(), position.getPositionSide(), cascadeReport)
+            CascadeRiskReport cascadeReport = latestCascadeReportsByUserAndSymbol.get(userSymbolKey);
+            mcService.simulate(userId, symbol, position.getLiquidationPrice(), position.getPositionSide(), cascadeReport)
                     .ifPresent(mcReport -> {
-                        lastMcCalcTimeBySymbol.put(symbol, System.nanoTime());
+                        lastMcCalcTimeByUserAndSymbol.put(userSymbolKey, System.nanoTime());
                         mcProcessedCounter.increment();
 
                         riskResultRingBuffer.publishEvent((resultEvent, seq) -> {
                             resultEvent.clear();
+                            resultEvent.setUserId(userId);
                             resultEvent.setMcReport(mcReport);
                         });
 
                         try {
                             calibrationLogger.logPrediction(mcReport);
                         } catch (Exception e) {
-                            log.warn("[MC] 캘리브레이션 기록 실패: symbol={}", symbol, e);
+                            log.warn("[MC] 캘리브레이션 기록 실패: userId={}, symbol={}", userId, symbol, e);
                         }
 
-                        log.info("[MC] {} | risk={} | 24h_prob={}% | σ={:.4f} | calc={}μs",
-                                symbol, mcReport.getRiskLevel(),
+                        log.info("[MC] userId={}, symbol={} | risk={} | 24h_prob={}% | σ={:.4f} | calc={}μs",
+                                userId, symbol, mcReport.getRiskLevel(),
                                 String.format("%.1f", get24hProbability(mcReport) * 100),
                                 mcReport.getSigma(), mcReport.getCalcDurationMicros());
                     });
         } catch (Exception e) {
-            log.error("[MC] 시뮬레이션 실패: symbol={}", symbol, e);
+            log.error("[MC] 시뮬레이션 실패: userId={}, symbol={}", userId, symbol, e);
         }
     }
 
@@ -196,5 +212,13 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
                 .findFirst()
                 .map(MonteCarloReport.HorizonResult::getLiquidationProbability)
                 .orElse(0.0);
+    }
+
+    private String userSymbolKey(String userId, String symbol) {
+        return normalizeUserId(userId) + "|" + symbol.toUpperCase();
+    }
+
+    private String normalizeUserId(String userId) {
+        return userId.trim().toLowerCase();
     }
 }

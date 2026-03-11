@@ -1,6 +1,5 @@
 package com.liquidation.riskengine.api;
 
-import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.UserPosition;
 import com.liquidation.riskengine.domain.service.RiskStateManager;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
@@ -26,35 +25,54 @@ public class MonteCarloController {
     private final RiskStateManager riskStateManager;
 
     @GetMapping("/simulate")
-    public ResponseEntity<Object> simulate(@RequestParam String symbol) {
+    public ResponseEntity<Object> simulate(
+            @RequestParam String userId,
+            @RequestParam String symbol) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "userId는 필수입니다."));
+        }
+        String normalizedUserId = userId.trim().toLowerCase();
         String key = symbol.toUpperCase();
 
-        UserPosition position = riskStateManager.getPosition(key);
+        UserPosition position = riskStateManager.getPosition(normalizedUserId, key);
         if (position == null) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
+                    "userId", normalizedUserId,
                     "symbol", key,
                     "message", "등록된 포지션이 없습니다. /api/position/register로 먼저 등록하세요."));
         }
 
-        log.info("[MC API] 온디맨드 시뮬레이션 요청: symbol={}", key);
+        log.info("[MC API] 온디맨드 시뮬레이션 요청: userId={}, symbol={}", normalizedUserId, key);
 
-        return mcService.simulate(key, position.getLiquidationPrice(), position.getPositionSide())
+        return mcService.simulate(normalizedUserId, key, position.getLiquidationPrice(), position.getPositionSide())
                 .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.ok(Map.of(
                         "success", false,
+                        "userId", normalizedUserId,
                         "symbol", key,
                         "message", "시뮬레이션 실행 불가: 현재가 없음 또는 MC 비활성 상태")));
     }
 
     @GetMapping("/latest")
-    public ResponseEntity<Object> latest(@RequestParam String symbol) {
+    public ResponseEntity<Object> latest(
+            @RequestParam String userId,
+            @RequestParam String symbol) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "userId는 필수입니다."));
+        }
+        String normalizedUserId = userId.trim().toLowerCase();
         String key = symbol.toUpperCase();
 
-        return mcService.getLatest(key)
+        return mcService.getLatest(normalizedUserId, key)
                 .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.ok(Map.of(
                         "success", false,
+                        "userId", normalizedUserId,
                         "symbol", key,
                         "message", "아직 MC 결과가 없습니다. /api/mc/simulate로 먼저 실행하거나 파이프라인 실행을 대기하세요.")));
     }
