@@ -48,7 +48,7 @@ public class DisruptorConfig {
                 new MarketDataEventFactory(),
                 INGEST_BUFFER_SIZE,
                 namedThreadFactory("disruptor-ingest"),
-                ProducerType.SINGLE,
+                ProducerType.MULTI,
                 waitStrategy
         );
 
