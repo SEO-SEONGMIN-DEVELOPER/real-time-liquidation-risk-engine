@@ -33,5 +33,7 @@ public class McPredictionRecord {
     private boolean verified;
     private Boolean actualHit;
     private Double priceAtDeadline;
+    private Double priceMinDuringHorizon;
+    private Double priceMaxDuringHorizon;
     private Long verifiedEpochMs;
 }

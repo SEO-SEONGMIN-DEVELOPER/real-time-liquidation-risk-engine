@@ -37,6 +37,38 @@ public class PriceHistoryBuffer {
         return buffer.query(cutoffMs);
     }
 
+    public record MinMax(double min, double max) {}
+
+    public MinMax getMinMaxInRange(String symbol, long fromMs, long toMs) {
+        if (symbol == null) return null;
+
+        CircularBuffer buffer = buffers.get(symbol.toUpperCase());
+        if (buffer == null) return null;
+
+        long h = buffer.head;
+        long t = buffer.tail;
+        if (t - h == 0) return null;
+
+        int startIdx = buffer.binarySearchStart(h, t, fromMs);
+
+        double min = Double.MAX_VALUE;
+        double max = -Double.MAX_VALUE;
+        boolean found = false;
+
+        for (long i = startIdx; i < t; i++) {
+            PriceTick tick = buffer.elements[(int) (i & buffer.mask)];
+            if (tick == null) continue;
+            if (tick.timestamp() > toMs) break;
+
+            double p = tick.price().doubleValue();
+            if (p < min) min = p;
+            if (p > max) max = p;
+            found = true;
+        }
+
+        return found ? new MinMax(min, max) : null;
+    }
+
     public int size(String symbol) {
         if (symbol == null) return 0;
         CircularBuffer buffer = buffers.get(symbol.toUpperCase());
