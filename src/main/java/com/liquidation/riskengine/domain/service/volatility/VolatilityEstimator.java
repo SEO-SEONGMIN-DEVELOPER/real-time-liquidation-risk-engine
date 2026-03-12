@@ -1,9 +1,11 @@
-package com.liquidation.riskengine.domain.service;
+package com.liquidation.riskengine.domain.service.volatility;
 
 import com.liquidation.riskengine.domain.model.PriceTick;
 import com.liquidation.riskengine.domain.model.VolatilitySnapshot;
 import com.liquidation.riskengine.domain.model.VolatilitySnapshot.EstimationMethod;
-import com.liquidation.riskengine.domain.service.GarchEstimator.GarchResult;
+import com.liquidation.riskengine.domain.service.state.PriceHistoryBuffer;
+import com.liquidation.riskengine.domain.service.volatility.GarchEstimator.GarchResult;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

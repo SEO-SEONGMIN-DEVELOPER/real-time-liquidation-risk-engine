@@ -1,4 +1,4 @@
-package com.liquidation.riskengine.domain.service;
+package com.liquidation.riskengine.domain.service.cascade;
 
 import com.liquidation.riskengine.domain.model.CascadeRiskReport;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport.DensityLevel;
@@ -9,7 +9,10 @@ import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot.PriceLevel;
-import com.liquidation.riskengine.domain.service.LiquidationPriceCalculator.EstimatedLiquidation;
+import com.liquidation.riskengine.domain.service.liquidation.LiquidationPriceCalculator.EstimatedLiquidation;
+import com.liquidation.riskengine.domain.service.liquidation.LiquidationClusterMap;
+import com.liquidation.riskengine.domain.service.liquidation.LiquidationPriceCalculator;
+import com.liquidation.riskengine.domain.service.state.RiskStateManager;
 import com.liquidation.riskengine.domain.service.calibration.CalibrationCorrector;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +26,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CascadeRiskCalculator {
 
     private final LiquidationPriceCalculator liquidationPriceCalculator;
+    private final LiquidationClusterMap liquidationClusterMap;
     private final CascadeRiskProperties cascadeProps;
     private final MonteCarloSimulationService mcService;
     private final CalibrationCorrector calibrationCorrector;
@@ -177,34 +183,71 @@ public class CascadeRiskCalculator {
         BigDecimal high = report.getPriceRangeHigh();
         BigDecimal currentPrice = report.getCurrentPrice();
         boolean isLong = "LONG".equalsIgnoreCase(report.getPositionSide());
-
-        List<EstimatedLiquidation> distribution =
-                liquidationPriceCalculator.estimateDistribution(currentPrice, report.getSymbol(), totalOi);
+        String symbol = report.getSymbol();
 
         List<LiqCluster> clustersInPath = new ArrayList<>();
         BigDecimal estimatedLiqVolume = BigDecimal.ZERO;
+        boolean usedFallback = false;
 
-        for (EstimatedLiquidation est : distribution) {
-            BigDecimal liqPrice = isLong ? est.longLiquidationPrice() : est.shortLiquidationPrice();
+        if (liquidationClusterMap.hasData(symbol)) {
+            Map<BigDecimal, BigDecimal> clusterMap = isLong
+                    ? liquidationClusterMap.getLongClusters(symbol)
+                    : liquidationClusterMap.getShortClusters(symbol);
 
-            if (liqPrice.compareTo(low) >= 0 && liqPrice.compareTo(high) <= 0) {
+            for (Entry<BigDecimal, BigDecimal> entry : clusterMap.entrySet()) {
+                BigDecimal liqPrice = entry.getKey();
+                BigDecimal volume = entry.getValue();
+
+                if (volume.compareTo(BigDecimal.ZERO) <= 0) continue;
+                if (liqPrice.compareTo(low) < 0 || liqPrice.compareTo(high) > 0) continue;
+
                 double distFromCurrent = currentPrice.subtract(liqPrice).abs()
                         .divide(currentPrice, MC)
                         .multiply(BigDecimal.valueOf(100), MC)
                         .setScale(2, RoundingMode.HALF_UP)
                         .doubleValue();
 
+                BigDecimal notional = volume.multiply(liqPrice, MC).setScale(2, RoundingMode.HALF_UP);
+
                 clustersInPath.add(LiqCluster.builder()
-                        .leverage(est.leverage())
+                        .leverage(0)
                         .price(liqPrice)
-                        .weight(est.weight())
-                        .estimatedVolume(est.estimatedVolume())
-                        .estimatedNotional(est.estimatedNotional())
+                        .weight(0.0)
+                        .estimatedVolume(volume.setScale(8, RoundingMode.HALF_UP))
+                        .estimatedNotional(notional)
                         .distanceFromCurrentPercent(distFromCurrent)
                         .build());
 
-                estimatedLiqVolume = estimatedLiqVolume.add(
-                        est.estimatedVolume() != null ? est.estimatedVolume() : BigDecimal.ZERO, MC);
+                estimatedLiqVolume = estimatedLiqVolume.add(volume, MC);
+            }
+        } else {
+            usedFallback = true;
+            List<EstimatedLiquidation> distribution =
+                    liquidationPriceCalculator.estimateDistribution(currentPrice, symbol, totalOi);
+
+            for (EstimatedLiquidation est : distribution) {
+                BigDecimal liqPrice = isLong
+                        ? est.longLiquidationPrice() : est.shortLiquidationPrice();
+
+                if (liqPrice.compareTo(low) >= 0 && liqPrice.compareTo(high) <= 0) {
+                    double distFromCurrent = currentPrice.subtract(liqPrice).abs()
+                            .divide(currentPrice, MC)
+                            .multiply(BigDecimal.valueOf(100), MC)
+                            .setScale(2, RoundingMode.HALF_UP)
+                            .doubleValue();
+
+                    clustersInPath.add(LiqCluster.builder()
+                            .leverage(est.leverage())
+                            .price(liqPrice)
+                            .weight(est.weight())
+                            .estimatedVolume(est.estimatedVolume())
+                            .estimatedNotional(est.estimatedNotional())
+                            .distanceFromCurrentPercent(distFromCurrent)
+                            .build());
+
+                    estimatedLiqVolume = estimatedLiqVolume.add(
+                            est.estimatedVolume() != null ? est.estimatedVolume() : BigDecimal.ZERO, MC);
+                }
             }
         }
 
@@ -212,15 +255,10 @@ public class CascadeRiskCalculator {
         report.setOverlappingTierCount(clustersInPath.size());
         report.setEstimatedLiqVolume(estimatedLiqVolume.setScale(4, RoundingMode.HALF_UP));
 
-        log.info("{} | 구간 내 청산 클러스터 {}개 | 추정 물량={} BTC | 클러스터: {}",
-                report.getSymbol(),
+        log.info("{} | [{}] 구간 내 청산 클러스터 {}개 | 추정 물량={} BTC",
+                symbol, usedFallback ? "fallback" : "liqMap",
                 clustersInPath.size(),
-                estimatedLiqVolume.setScale(4, RoundingMode.HALF_UP).toPlainString(),
-                clustersInPath.stream()
-                        .map(c -> String.format("%dx(%.2f%%, vol=%s)",
-                                c.getLeverage(), c.getDistanceFromCurrentPercent(),
-                                c.getEstimatedVolume() != null ? c.getEstimatedVolume().toPlainString() : "N/A"))
-                        .toList());
+                estimatedLiqVolume.setScale(4, RoundingMode.HALF_UP).toPlainString());
 
         return report;
     }

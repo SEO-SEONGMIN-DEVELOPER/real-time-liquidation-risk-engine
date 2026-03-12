@@ -5,9 +5,8 @@ import com.lmax.disruptor.RingBuffer;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport;
 import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.UserPosition;
-import com.liquidation.riskengine.domain.service.CascadeRiskCalculator;
-import com.liquidation.riskengine.domain.service.MarkPriceCache;
-import com.liquidation.riskengine.domain.service.RiskStateManager;
+import com.liquidation.riskengine.domain.service.cascade.CascadeRiskCalculator;
+import com.liquidation.riskengine.domain.service.state.RiskStateManager;
 import com.liquidation.riskengine.domain.service.cascade.CascadeCalibrationLogger;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloCalibrationLogger;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloProperties;
@@ -37,7 +36,6 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
 
     private final CascadeRiskCalculator cascadeRiskCalculator;
     private final RiskStateManager riskStateManager;
-    private final MarkPriceCache markPriceCache;
     private final RingBuffer<RiskResultEvent> riskResultRingBuffer;
     private final MeterRegistry meterRegistry;
     private final MonteCarloSimulationService mcService;
@@ -107,7 +105,7 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
             }
         }
 
-        BigDecimal currentPrice = markPriceCache.get(symbol);
+        BigDecimal currentPrice = riskStateManager.getLatestMarkPrice(symbol);
         if (currentPrice == null) return;
 
         for (UserPosition position : positions) {

@@ -1,4 +1,4 @@
-package com.liquidation.riskengine.domain.service;
+package com.liquidation.riskengine.domain.service.volatility;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
