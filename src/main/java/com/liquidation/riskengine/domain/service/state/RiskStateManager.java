@@ -1,4 +1,4 @@
-package com.liquidation.riskengine.domain.service;
+package com.liquidation.riskengine.domain.service.state;
 
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
@@ -7,6 +7,7 @@ import com.liquidation.riskengine.domain.model.UserPosition;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -24,6 +25,7 @@ public class RiskStateManager {
 
     private static final int MAX_LIQUIDATIONS_PER_SYMBOL = 500;
 
+    private final Map<String, BigDecimal> latestMarkPrices = new ConcurrentHashMap<>();
     private final Map<String, OrderBookSnapshot> latestOrderBooks = new ConcurrentHashMap<>();
     private final Map<String, OpenInterestSnapshot> latestOiSnapshots = new ConcurrentHashMap<>();
     private final Map<String, Deque<LiquidationEvent>> recentLiquidations = new ConcurrentHashMap<>();
@@ -111,6 +113,11 @@ public class RiskStateManager {
         latestOrderBooks.put(symbol, snapshot);
     }
 
+    public void updateMarkPrice(String symbol, BigDecimal markPrice) {
+        if (symbol == null || markPrice == null) return;
+        latestMarkPrices.put(symbol.toUpperCase(), markPrice);
+    }
+
     public void updateOpenInterest(OpenInterestSnapshot snapshot) {
         if (snapshot == null || snapshot.getSymbol() == null) return;
         String symbol = snapshot.getSymbol().toUpperCase();
@@ -134,6 +141,11 @@ public class RiskStateManager {
     public OrderBookSnapshot getLatestOrderBook(String symbol) {
         if (symbol == null) return null;
         return latestOrderBooks.get(symbol.toUpperCase());
+    }
+
+    public BigDecimal getLatestMarkPrice(String symbol) {
+        if (symbol == null) return null;
+        return latestMarkPrices.get(symbol.toUpperCase());
     }
 
     public OpenInterestSnapshot getLatestOpenInterest(String symbol) {

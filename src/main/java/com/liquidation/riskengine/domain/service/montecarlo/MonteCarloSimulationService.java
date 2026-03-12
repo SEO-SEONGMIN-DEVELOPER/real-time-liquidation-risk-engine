@@ -3,9 +3,9 @@ package com.liquidation.riskengine.domain.service.montecarlo;
 import com.liquidation.riskengine.domain.model.CascadeRiskReport;
 import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.VolatilitySnapshot;
-import com.liquidation.riskengine.domain.service.GarchEstimator.GarchResult;
-import com.liquidation.riskengine.domain.service.MarkPriceCache;
-import com.liquidation.riskengine.domain.service.VolatilityEstimator;
+import com.liquidation.riskengine.domain.service.volatility.GarchEstimator.GarchResult;
+import com.liquidation.riskengine.domain.service.state.RiskStateManager;
+import com.liquidation.riskengine.domain.service.volatility.VolatilityEstimator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class MonteCarloSimulationService {
 
-    private final MarkPriceCache markPriceCache;
+    private final RiskStateManager riskStateManager;
     private final VolatilityEstimator volatilityEstimator;
     private final PricePathGenerator pricePathGenerator;
     private final LiquidationDetector liquidationDetector;
@@ -62,7 +62,7 @@ public class MonteCarloSimulationService {
             return Optional.empty();
         }
 
-        BigDecimal currentPrice = markPriceCache.get(symbol);
+        BigDecimal currentPrice = riskStateManager.getLatestMarkPrice(symbol);
         if (currentPrice == null) {
             log.warn("[MC] 현재가 없음, 시뮬레이션 불가: symbol={}", symbol);
             return Optional.empty();

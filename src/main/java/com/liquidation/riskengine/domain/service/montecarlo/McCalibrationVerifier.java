@@ -2,9 +2,9 @@ package com.liquidation.riskengine.domain.service.montecarlo;
 
 import com.liquidation.riskengine.domain.model.McPredictionRecord;
 import com.liquidation.riskengine.domain.repository.McPredictionRepository;
-import com.liquidation.riskengine.domain.service.MarkPriceCache;
-import com.liquidation.riskengine.domain.service.PriceHistoryBuffer;
-import com.liquidation.riskengine.domain.service.PriceHistoryBuffer.MinMax;
+import com.liquidation.riskengine.domain.service.state.PriceHistoryBuffer;
+import com.liquidation.riskengine.domain.service.state.PriceHistoryBuffer.MinMax;
+import com.liquidation.riskengine.domain.service.state.RiskStateManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,7 +19,7 @@ import java.util.List;
 public class McCalibrationVerifier {
 
     private final McPredictionRepository repository;
-    private final MarkPriceCache markPriceCache;
+    private final RiskStateManager riskStateManager;
     private final PriceHistoryBuffer priceHistoryBuffer;
 
     @Scheduled(fixedDelayString = "${montecarlo.calibration.verify-interval-ms:60000}")
@@ -32,7 +32,7 @@ public class McCalibrationVerifier {
 
         int verified = 0;
         for (McPredictionRecord record : pending) {
-            BigDecimal currentPrice = markPriceCache.get(record.getSymbol());
+            BigDecimal currentPrice = riskStateManager.getLatestMarkPrice(record.getSymbol());
             if (currentPrice == null) continue;
 
             boolean isLong = "LONG".equalsIgnoreCase(record.getPositionSide());

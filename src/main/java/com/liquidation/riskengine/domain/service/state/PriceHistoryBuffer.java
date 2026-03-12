@@ -1,4 +1,4 @@
-package com.liquidation.riskengine.domain.service;
+package com.liquidation.riskengine.domain.service.state;
 
 import com.liquidation.riskengine.domain.model.PriceTick;
 import lombok.extern.slf4j.Slf4j;

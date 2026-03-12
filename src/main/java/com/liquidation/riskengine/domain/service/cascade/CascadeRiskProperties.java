@@ -1,4 +1,4 @@
-package com.liquidation.riskengine.domain.service;
+package com.liquidation.riskengine.domain.service.cascade;
 
 import lombok.Getter;
 import lombok.Setter;

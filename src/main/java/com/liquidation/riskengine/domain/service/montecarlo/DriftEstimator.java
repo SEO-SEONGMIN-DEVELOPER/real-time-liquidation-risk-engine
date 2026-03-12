@@ -1,7 +1,7 @@
 package com.liquidation.riskengine.domain.service.montecarlo;
 
 import com.liquidation.riskengine.domain.model.PriceTick;
-import com.liquidation.riskengine.domain.service.PriceHistoryBuffer;
+import com.liquidation.riskengine.domain.service.state.PriceHistoryBuffer;
 import com.liquidation.riskengine.infra.binance.scheduler.FundingRateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
