@@ -8,6 +8,7 @@ import com.liquidation.riskengine.domain.model.UserPosition;
 import com.liquidation.riskengine.domain.service.CascadeRiskCalculator;
 import com.liquidation.riskengine.domain.service.MarkPriceCache;
 import com.liquidation.riskengine.domain.service.RiskStateManager;
+import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloCalibrationLogger;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloProperties;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import com.liquidation.riskengine.infra.disruptor.event.EventType;
@@ -39,6 +40,7 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
     private final MeterRegistry meterRegistry;
     private final MonteCarloSimulationService mcService;
     private final MonteCarloProperties mcProperties;
+    private final MonteCarloCalibrationLogger calibrationLogger;
 
     @Value("${risk.cascade.throttle-ms:200}")
     private long cascadeThrottleMs;
@@ -159,6 +161,12 @@ public class RiskCalculationHandler implements EventHandler<MarketDataEvent> {
                             resultEvent.clear();
                             resultEvent.setMcReport(mcReport);
                         });
+
+                        try {
+                            calibrationLogger.logPrediction(mcReport);
+                        } catch (Exception e) {
+                            log.warn("[MC] 캘리브레이션 기록 실패: symbol={}", symbol, e);
+                        }
 
                         log.info("[MC] {} | risk={} | 24h_prob={}% | σ={:.4f} | calc={}μs",
                                 symbol, mcReport.getRiskLevel(),

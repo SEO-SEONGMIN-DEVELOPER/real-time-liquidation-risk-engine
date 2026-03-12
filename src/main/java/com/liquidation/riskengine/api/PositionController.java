@@ -2,6 +2,7 @@ package com.liquidation.riskengine.api;
 
 import com.liquidation.riskengine.domain.model.UserPosition;
 import com.liquidation.riskengine.domain.service.RiskStateManager;
+import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloCalibrationLogger;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ public class PositionController {
 
     private final RiskStateManager riskStateManager;
     private final MonteCarloSimulationService mcService;
+    private final MonteCarloCalibrationLogger calibrationLogger;
     private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping("/register")
@@ -57,6 +59,7 @@ public class PositionController {
                         .ifPresent(mcReport -> {
                             String dest = "/topic/mc/" + symbol;
                             messagingTemplate.convertAndSend(dest, mcReport);
+                            calibrationLogger.logPrediction(mcReport);
                             log.info("[Position API] 즉시 MC 완료: symbol={}, risk={}", symbol, mcReport.getRiskLevel());
                         });
             } catch (Exception e) {
