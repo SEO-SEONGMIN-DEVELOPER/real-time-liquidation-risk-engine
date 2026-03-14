@@ -1,7 +1,6 @@
 package com.liquidation.riskengine.domain.service.calibration;
 
-import com.liquidation.riskengine.domain.model.CascadePredictionRecord;
-import com.liquidation.riskengine.domain.model.McPredictionRecord;
+import com.liquidation.riskengine.domain.repository.CalibrationBucketRow;
 import com.liquidation.riskengine.domain.repository.CascadePredictionRepository;
 import com.liquidation.riskengine.domain.repository.McPredictionRepository;
 import lombok.Builder;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 @Slf4j
@@ -23,7 +21,6 @@ public class CalibrationCorrector {
 
     static final int MIN_TOTAL_SAMPLES = 300;
     static final int MIN_BUCKET_SAMPLES = 30;
-    static final int BUCKET_COUNT = 10;
 
     private final McPredictionRepository mcRepository;
     private final CascadePredictionRepository cascadeRepository;
@@ -43,39 +40,25 @@ public class CalibrationCorrector {
     }
 
     public void fitMcModel() {
-        List<McPredictionRecord> records = mcRepository.findVerified(null, null);
-        if (records.size() < MIN_TOTAL_SAMPLES) {
+        List<CalibrationBucketRow> buckets = mcRepository.findBucketedForCalibration(null, null);
+        long totalSamples = buckets.stream().mapToLong(CalibrationBucketRow::getSampleCount).sum();
+        if (totalSamples < MIN_TOTAL_SAMPLES) {
             mcModel = null;
-            log.info("[Calibration] MC 데이터 부족: {}/{}", records.size(), MIN_TOTAL_SAMPLES);
+            log.info("[Calibration] MC 데이터 부족: {}/{}", totalSamples, MIN_TOTAL_SAMPLES);
             return;
         }
-
-        double[] predicted = new double[records.size()];
-        double[] actual = new double[records.size()];
-        for (int i = 0; i < records.size(); i++) {
-            predicted[i] = records.get(i).getPredictedProbability();
-            actual[i] = Boolean.TRUE.equals(records.get(i).getActualHit()) ? 1.0 : 0.0;
-        }
-
-        mcModel = fitIsotonic(predicted, actual, "MC");
+        mcModel = fitIsotonicFromBuckets(buckets, "MC");
     }
 
     public void fitCascadeModel() {
-        List<CascadePredictionRecord> records = cascadeRepository.findVerified(null);
-        if (records.size() < MIN_TOTAL_SAMPLES) {
+        List<CalibrationBucketRow> buckets = cascadeRepository.findBucketedForCalibration(null);
+        long totalSamples = buckets.stream().mapToLong(CalibrationBucketRow::getSampleCount).sum();
+        if (totalSamples < MIN_TOTAL_SAMPLES) {
             cascadeModel = null;
-            log.info("[Calibration] Cascade 데이터 부족: {}/{}", records.size(), MIN_TOTAL_SAMPLES);
+            log.info("[Calibration] Cascade 데이터 부족: {}/{}", totalSamples, MIN_TOTAL_SAMPLES);
             return;
         }
-
-        double[] predicted = new double[records.size()];
-        double[] actual = new double[records.size()];
-        for (int i = 0; i < records.size(); i++) {
-            predicted[i] = records.get(i).getReachProbability();
-            actual[i] = Boolean.TRUE.equals(records.get(i).getActualHit()) ? 1.0 : 0.0;
-        }
-
-        cascadeModel = fitIsotonic(predicted, actual, "Cascade");
+        cascadeModel = fitIsotonicFromBuckets(buckets, "Cascade");
     }
 
     public double correctMc(double rawProb) {
@@ -122,64 +105,28 @@ public class CalibrationCorrector {
                 .build();
     }
 
-    private IsotonicModel fitIsotonic(double[] predicted, double[] actual, String label) {
-        int n = predicted.length;
-        Integer[] indices = new Integer[n];
-        for (int i = 0; i < n; i++) indices[i] = i;
-        Arrays.sort(indices, (a, b) -> Double.compare(predicted[a], predicted[b]));
+    private IsotonicModel fitIsotonicFromBuckets(List<CalibrationBucketRow> buckets, String label) {
+        List<CalibrationBucketRow> valid = buckets.stream()
+                .filter(b -> b.getSampleCount() >= MIN_BUCKET_SAMPLES)
+                .toList();
 
-        double[] sortedPred = new double[n];
-        double[] sortedActual = new double[n];
-        for (int i = 0; i < n; i++) {
-            sortedPred[i] = predicted[indices[i]];
-            sortedActual[i] = actual[indices[i]];
-        }
-
-        double[] bucketPredSum = new double[BUCKET_COUNT];
-        double[] bucketActualSum = new double[BUCKET_COUNT];
-        int[] bucketCount = new int[BUCKET_COUNT];
-
-        for (int i = 0; i < n; i++) {
-            int b = Math.min((int) (sortedPred[i] * BUCKET_COUNT), BUCKET_COUNT - 1);
-            bucketPredSum[b] += sortedPred[i];
-            bucketActualSum[b] += sortedActual[i];
-            bucketCount[b]++;
-        }
-
-        double[] x = new double[BUCKET_COUNT];
-        double[] y = new double[BUCKET_COUNT];
-        boolean[] valid = new boolean[BUCKET_COUNT];
-        int validCount = 0;
-
-        for (int i = 0; i < BUCKET_COUNT; i++) {
-            if (bucketCount[i] >= MIN_BUCKET_SAMPLES) {
-                x[i] = bucketPredSum[i] / bucketCount[i];
-                y[i] = bucketActualSum[i] / bucketCount[i];
-                valid[i] = true;
-                validCount++;
-            }
-        }
-
-        if (validCount < 3) {
-            log.info("[Calibration] {} 유효 버킷 부족: {}/3", label, validCount);
+        if (valid.size() < 3) {
+            log.info("[Calibration] {} 유효 버킷 부족: {}/3", label, valid.size());
             return null;
         }
 
-        double[] compactX = new double[validCount];
-        double[] compactY = new double[validCount];
-        int idx = 0;
-        for (int i = 0; i < BUCKET_COUNT; i++) {
-            if (valid[i]) {
-                compactX[idx] = x[i];
-                compactY[idx] = y[i];
-                idx++;
-            }
+        double[] x = new double[valid.size()];
+        double[] y = new double[valid.size()];
+        for (int i = 0; i < valid.size(); i++) {
+            x[i] = valid.get(i).getMeanPredicted();
+            y[i] = valid.get(i).getActualHitRate();
         }
 
-        poolAdjacentViolators(compactY);
+        poolAdjacentViolators(y);
 
-        log.info("[Calibration] {} Isotonic 피팅 완료: points={}, samples={}", label, validCount, n);
-        return new IsotonicModel(compactX, compactY);
+        long totalSamples = valid.stream().mapToLong(CalibrationBucketRow::getSampleCount).sum();
+        log.info("[Calibration] {} Isotonic 피팅 완료: points={}, samples={}", label, valid.size(), totalSamples);
+        return new IsotonicModel(x, y);
     }
 
     private void poolAdjacentViolators(double[] y) {

@@ -7,13 +7,22 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
-public interface CascadePredictionRepository extends JpaRepository<CascadePredictionRecord, Long> {
+public interface CascadePredictionRepository extends JpaRepository<CascadePredictionRecord, CascadePredictionRecord.CascadePredictionKey> {
 
     List<CascadePredictionRecord> findByVerifiedFalseAndDeadlineEpochMsLessThanEqual(long now);
 
-    @Query("SELECT c FROM CascadePredictionRecord c WHERE c.verified = true " +
-            "AND (:symbol IS NULL OR c.symbol = :symbol)")
-    List<CascadePredictionRecord> findVerified(@Param("symbol") String symbol);
+    @Query(value = """
+            SELECT
+                AVG(reach_probability)                                        AS mean_predicted,
+                AVG(CASE WHEN actual_hit = true THEN 1.0 ELSE 0.0 END)       AS actual_hit_rate,
+                COUNT(*)                                                      AS sample_count
+            FROM cascade_prediction_record
+            WHERE verified = true
+              AND (:symbol IS NULL OR symbol = :symbol)
+            GROUP BY FLOOR(reach_probability * 10)
+            ORDER BY FLOOR(reach_probability * 10)
+            """, nativeQuery = true)
+    List<CalibrationBucketRow> findBucketedForCalibration(@Param("symbol") String symbol);
 
     long countByVerifiedTrue();
 }
