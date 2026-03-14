@@ -25,6 +25,7 @@ public class MonteCarloSimulationService {
     private final PricePathGenerator pricePathGenerator;
     private final LiquidationDetector liquidationDetector;
     private final MonteCarloProperties properties;
+    private final DriftEstimator driftEstimator;
 
     private final Map<String, MonteCarloReport> latestReports = new ConcurrentHashMap<>();
 
@@ -58,9 +59,12 @@ public class MonteCarloSimulationService {
             log.debug("[MC] GARCH σ schedule 적용: symbol={}, σ_0={:.4f}, steps={}", symbol, sigma, totalSteps);
         }
 
+        double mu = driftEstimator.estimate(symbol);
+
         SimulationRequest request = SimulationRequest.builder()
                 .startPrice(currentPrice.doubleValue())
                 .sigma(sigma)
+                .mu(mu)
                 .pathCount(properties.getPathCount())
                 .timeStepMinutes(properties.getTimeStepMinutes())
                 .horizonMinutes(properties.maxHorizonMinutes())
@@ -81,8 +85,8 @@ public class MonteCarloSimulationService {
                 properties.horizonsArray());
 
         long totalMicros = (System.nanoTime() - startNano) / 1_000;
-        log.info("[MC] 시뮬레이션 완료: symbol={}, side={}, σ={:.4f}, risk={}, paths={}, total={}μs",
-                symbol, positionSide, sigma, report.getRiskLevel(),
+        log.info("[MC] 시뮬레이션 완료: symbol={}, side={}, σ={:.4f}, μ={:.4f}, risk={}, paths={}, total={}μs",
+                symbol, positionSide, sigma, mu, report.getRiskLevel(),
                 properties.getPathCount(), totalMicros);
 
         latestReports.put(symbol.toUpperCase(), report);
