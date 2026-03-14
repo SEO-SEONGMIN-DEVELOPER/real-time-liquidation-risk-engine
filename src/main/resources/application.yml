@@ -22,10 +22,24 @@ binance:
   max-reconnect-attempts: 0
   open-interest-poll-interval-ms: 3000
 
-# Cascade Risk 스로틀 설정
+# Cascade Risk 설정
 risk:
   cascade:
     throttle-ms: 200
+    weights:
+      distance: 0.40
+      depth: 0.20
+      level: 0.15
+      cluster: 0.15
+      notional: 0.10
+    synthesis:
+      density-weight: 0.6
+      pressure-weight: 0.4
+    floor:
+      critical-distance-pct: 1.0
+      high-distance-pct: 2.0
+      medium-distance-pct: 5.0
+    proximity-threshold-pct: 10.0
 
 # 변동성 추정 설정
 volatility:

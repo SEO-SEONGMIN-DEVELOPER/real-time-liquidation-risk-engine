@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CascadeRiskCalculator {
 
     private final LiquidationPriceCalculator liquidationPriceCalculator;
+    private final CascadeRiskProperties cascadeProps;
 
     private static final MathContext MC = new MathContext(8, RoundingMode.HALF_UP);
     private static final Duration RECENT_LIQ_WINDOW = Duration.ofMinutes(30);
@@ -66,7 +67,7 @@ public class CascadeRiskCalculator {
                 () -> mapLiquidationClusters(report, totalOi), ANALYSIS_POOL);
 
         CompletableFuture<Void> pressureFuture = CompletableFuture.runAsync(
-                () -> analyzeMarketPressure(report, latestOi, recentLiqs, orderBook), ANALYSIS_POOL);
+                () -> analyzeMarketPressure(report, latestOi, recentLiqs, orderBook, positionSide), ANALYSIS_POOL);
 
         CompletableFuture.allOf(densityFuture, clusterFuture, pressureFuture).join();
 
@@ -223,11 +224,12 @@ public class CascadeRiskCalculator {
             CascadeRiskReport report,
             OpenInterestSnapshot latestOi,
             List<LiquidationEvent> recentLiqs,
-            OrderBookSnapshot orderBook) {
+            OrderBookSnapshot orderBook,
+            String positionSide) {
 
-        int oiScore = calcOiPressureScore(latestOi);
+        int oiScore = calcOiPressureScore(latestOi, positionSide, report.getCurrentPrice());
         int liqScore = calcLiqIntensityScore(recentLiqs);
-        int imbScore = calcImbalanceScore(orderBook);
+        int imbScore = calcImbalanceScore(orderBook, positionSide);
         int total = oiScore + liqScore + imbScore;
 
         report.setOiPressureScore(oiScore);
@@ -241,16 +243,27 @@ public class CascadeRiskCalculator {
         return report;
     }
 
-    private int calcOiPressureScore(OpenInterestSnapshot oi) {
+    private int calcOiPressureScore(OpenInterestSnapshot oi, String positionSide, BigDecimal currentPrice) {
         if (oi == null || oi.getChangePercent() == null) return 5;
-        double changePercent = Math.abs(oi.getChangePercent().doubleValue());
 
-        if (changePercent >= 5.0) return 20;
-        if (changePercent >= 3.0) return 16;
-        if (changePercent >= 2.0) return 12;
-        if (changePercent >= 1.0) return 8;
-        if (changePercent >= 0.5) return 4;
-        return 0;
+        double changePct = oi.getChangePercent().doubleValue();
+        double absChange = Math.abs(changePct);
+
+        int baseScore;
+        if (absChange >= 5.0) baseScore = 20;
+        else if (absChange >= 3.0) baseScore = 16;
+        else if (absChange >= 2.0) baseScore = 12;
+        else if (absChange >= 1.0) baseScore = 8;
+        else if (absChange >= 0.5) baseScore = 4;
+        else baseScore = 0;
+
+        boolean oiIncreasing = changePct > 0;
+
+        if (oiIncreasing && absChange >= 1.0) {
+            baseScore = Math.min(20, baseScore + 3);
+        }
+
+        return baseScore;
     }
 
     private int calcLiqIntensityScore(List<LiquidationEvent> recentLiqs) {
@@ -281,7 +294,7 @@ public class CascadeRiskCalculator {
         return Math.min(20, countScore + notionalScore);
     }
 
-    private int calcImbalanceScore(OrderBookSnapshot ob) {
+    private int calcImbalanceScore(OrderBookSnapshot ob, String positionSide) {
         if (ob == null) return 5;
 
         BigDecimal bidQty = ob.getBidTotalQuantity() != null ? ob.getBidTotalQuantity() : BigDecimal.ZERO;
@@ -290,12 +303,17 @@ public class CascadeRiskCalculator {
 
         if (total.compareTo(BigDecimal.ZERO) == 0) return 10;
         double bidRatio = bidQty.doubleValue() / total.doubleValue();
-        double imbalance = Math.abs(bidRatio - 0.5) * 2;
+        double askRatio = 1.0 - bidRatio;
 
-        if (imbalance >= 0.7) return 20;
-        if (imbalance >= 0.5) return 15;
-        if (imbalance >= 0.3) return 10;
-        if (imbalance >= 0.15) return 5;
+        boolean isLong = "LONG".equalsIgnoreCase(positionSide);
+
+        double dangerousRatio = isLong ? askRatio : bidRatio;
+        double directionalImbalance = Math.max(0, (dangerousRatio - 0.5) * 2);
+
+        if (directionalImbalance >= 0.7) return 20;
+        if (directionalImbalance >= 0.5) return 15;
+        if (directionalImbalance >= 0.3) return 10;
+        if (directionalImbalance >= 0.15) return 5;
         return 0;
     }
 
@@ -303,39 +321,64 @@ public class CascadeRiskCalculator {
         double densityScore = calcDensityScore(report);
         DensityLevel densityLevel = DensityLevel.fromScore(densityScore);
 
+        CascadeRiskProperties.Synthesis syn = cascadeProps.getSynthesis();
         double marketPressureNorm = report.getMarketPressureTotal() * (100.0 / 60.0);
-        double reachProb = densityScore * 0.6 + marketPressureNorm * 0.4;
+        double reachProb = densityScore * syn.getDensityWeight() + marketPressureNorm * syn.getPressureWeight();
         reachProb = Math.max(0, Math.min(100, reachProb));
 
-        RiskLevel riskLevel = RiskLevel.fromScore(reachProb);
+        RiskLevel computed = RiskLevel.fromScore(reachProb);
+        RiskLevel minLevel = distanceFloor(report.getDistancePercent());
+        RiskLevel riskLevel = computed.ordinal() >= minLevel.ordinal() ? computed : minLevel;
 
         report.setDensityScore(Math.round(densityScore * 10.0) / 10.0);
         report.setDensityLevel(densityLevel);
         report.setCascadeReachProbability(Math.round(reachProb * 10.0) / 10.0);
         report.setRiskLevel(riskLevel);
 
-        log.info("{} | densityScore={} ({}) | marketPressure={}/60 | reachProb={}% | riskLevel={}",
+        log.info("{} | densityScore={} ({}) | marketPressure={}/60 | reachProb={}% | riskLevel={} (floor={})",
                 report.getSymbol(),
                 String.format("%.1f", densityScore), densityLevel,
                 report.getMarketPressureTotal(),
                 String.format("%.1f", reachProb),
-                riskLevel);
+                riskLevel, minLevel);
 
         return report;
     }
 
+    private RiskLevel distanceFloor(double distPct) {
+        CascadeRiskProperties.Floor f = cascadeProps.getFloor();
+        if (distPct <= f.getCriticalDistancePct()) return RiskLevel.CRITICAL;
+        if (distPct <= f.getHighDistancePct()) return RiskLevel.HIGH;
+        if (distPct <= f.getMediumDistancePct()) return RiskLevel.MEDIUM;
+        return RiskLevel.LOW;
+    }
+
     private double calcDensityScore(CascadeRiskReport r) {
-        double distScore = scoreDist(r.getDistancePercent());
+        double distPct = r.getDistancePercent();
+        double distScore = scoreDist(distPct);
         double depthScore = scoreDepthRatio(r.getDepthRatio());
         double levelScore = scoreLevelCount(r.getLevelCount());
         double clusterScore = scoreClusterOverlap(r.getOverlappingTierCount());
         double notionalScore = scoreNotional(r.getNotionalBetween());
 
-        return distScore * 0.30
-                + depthScore * 0.30
-                + levelScore * 0.15
-                + clusterScore * 0.15
-                + notionalScore * 0.10;
+        double threshold = cascadeProps.getProximityThresholdPct();
+        double proximityFactor = Math.min(1.0, distPct / threshold);
+        depthScore = depthScore * proximityFactor + 100 * (1 - proximityFactor);
+        levelScore = levelScore * proximityFactor + 100 * (1 - proximityFactor);
+        notionalScore = notionalScore * proximityFactor + 100 * (1 - proximityFactor);
+
+        CascadeRiskProperties.Weights w = cascadeProps.getWeights();
+        double baseDistWeight = w.getDistance();
+        double dynamicDistWeight = baseDistWeight + 0.20 * (1 - proximityFactor);
+
+        double otherTotal = w.getDepth() + w.getLevel() + w.getCluster() + w.getNotional();
+        double otherScale = (1.0 - dynamicDistWeight) / otherTotal;
+
+        return distScore * dynamicDistWeight
+                + depthScore * w.getDepth() * otherScale
+                + levelScore * w.getLevel() * otherScale
+                + clusterScore * w.getCluster() * otherScale
+                + notionalScore * w.getNotional() * otherScale;
     }
 
     private double scoreDist(double distPct) {
