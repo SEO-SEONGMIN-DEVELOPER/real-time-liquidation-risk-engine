@@ -1,6 +1,6 @@
 package com.liquidation.riskengine.domain.service.montecarlo;
 
-import com.liquidation.riskengine.domain.model.McPredictionRecord;
+import com.liquidation.riskengine.domain.repository.CalibrationBucketRow;
 import com.liquidation.riskengine.domain.repository.McPredictionRepository;
 import lombok.Builder;
 import lombok.Getter;
@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -16,51 +15,38 @@ import java.util.List;
 @RequiredArgsConstructor
 public class McCalibrationMetrics {
 
-    private static final int BUCKET_COUNT = 10;
-
     private final McPredictionRepository repository;
 
     public CalibrationReport calculate(String symbol, Integer horizon) {
-        List<McPredictionRecord> records = repository.findVerified(symbol, horizon);
+        List<CalibrationBucketRow> buckets = repository.findBucketedForCalibration(symbol, horizon);
 
-        if (records.isEmpty()) {
+        if (buckets.isEmpty()) {
             return CalibrationReport.builder()
                     .totalSamples(0)
                     .calibrationCurve(List.of())
                     .build();
         }
 
-        int[] bucketHits = new int[BUCKET_COUNT];
-        int[] bucketCounts = new int[BUCKET_COUNT];
-        double[] bucketProbSum = new double[BUCKET_COUNT];
+        long totalSamples = buckets.stream().mapToLong(CalibrationBucketRow::getSampleCount).sum();
 
-        for (McPredictionRecord r : records) {
-            double p = r.getPredictedProbability();
-            int outcome = Boolean.TRUE.equals(r.getActualHit()) ? 1 : 0;
-
-            int bucket = Math.min((int) (p * BUCKET_COUNT), BUCKET_COUNT - 1);
-            bucketCounts[bucket]++;
-            bucketHits[bucket] += outcome;
-            bucketProbSum[bucket] += p;
-        }
-
-        List<CalibrationBucket> curve = new ArrayList<>(BUCKET_COUNT);
-        for (int i = 0; i < BUCKET_COUNT; i++) {
-            if (bucketCounts[i] == 0) continue;
-            curve.add(CalibrationBucket.builder()
-                    .bucketRangeStart(i * 0.1)
-                    .bucketRangeEnd((i + 1) * 0.1)
-                    .meanPredictedProb(bucketProbSum[i] / bucketCounts[i])
-                    .actualHitRate((double) bucketHits[i] / bucketCounts[i])
-                    .sampleCount(bucketCounts[i])
-                    .build());
-        }
+        List<CalibrationBucket> curve = buckets.stream()
+                .map(b -> {
+                    double start = Math.floor(b.getMeanPredicted() * 10) / 10.0;
+                    return CalibrationBucket.builder()
+                            .bucketRangeStart(start)
+                            .bucketRangeEnd(start + 0.1)
+                            .meanPredictedProb(b.getMeanPredicted())
+                            .actualHitRate(b.getActualHitRate())
+                            .sampleCount((int) b.getSampleCount())
+                            .build();
+                })
+                .toList();
 
         log.info("[Calibration] samples={}, buckets={}, symbol={}, horizon={}",
-                records.size(), curve.size(), symbol, horizon);
+                totalSamples, curve.size(), symbol, horizon);
 
         return CalibrationReport.builder()
-                .totalSamples(records.size())
+                .totalSamples((int) totalSamples)
                 .calibrationCurve(curve)
                 .build();
     }
