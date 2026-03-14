@@ -3,6 +3,7 @@ package com.liquidation.riskengine.domain.service;
 import com.liquidation.riskengine.domain.model.PriceTick;
 import com.liquidation.riskengine.domain.model.VolatilitySnapshot;
 import com.liquidation.riskengine.domain.model.VolatilitySnapshot.EstimationMethod;
+import com.liquidation.riskengine.domain.service.GarchEstimator.GarchResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,8 @@ public class VolatilityEstimator {
     private static final Duration WINDOW_24H = Duration.ofHours(24);
 
     private final PriceHistoryBuffer priceHistoryBuffer;
+    private final VolatilityProperties volatilityProperties;
+    private final GarchEstimator garchEstimator;
 
     public VolatilitySnapshot estimate(String symbol) {
         if (symbol == null) {
@@ -33,6 +36,20 @@ public class VolatilityEstimator {
         }
         String key = symbol.toUpperCase();
         int totalTicks = priceHistoryBuffer.size(key);
+        boolean useGarch = "garch".equalsIgnoreCase(volatilityProperties.getModel());
+
+        if (useGarch) {
+            return VolatilitySnapshot.builder()
+                    .symbol(key)
+                    .sigma1m(computeAnnualized(key, WINDOW_1M))
+                    .sigma5m(computeAnnualized(key, WINDOW_5M))
+                    .sigma1h(computeAnnualized(key, WINDOW_1H))
+                    .sigma24h(computeAnnualized(key, WINDOW_24H))
+                    .method(EstimationMethod.GARCH)
+                    .sampleCount(totalTicks)
+                    .timestamp(System.currentTimeMillis())
+                    .build();
+        }
 
         return VolatilitySnapshot.builder()
                 .symbol(key)
@@ -48,7 +65,49 @@ public class VolatilityEstimator {
 
     public double estimateForWindow(String symbol, Duration window) {
         if (symbol == null || window == null) return DEFAULT_ANNUAL_VOL;
-        return computeEwmaAnnualized(symbol.toUpperCase(), window);
+        return computeAnnualized(symbol.toUpperCase(), window);
+    }
+
+    public GarchResult estimateGarch(String symbol, Duration window) {
+        if (symbol == null || window == null) return null;
+        if (!"garch".equalsIgnoreCase(volatilityProperties.getModel())) return null;
+
+        String key = symbol.toUpperCase();
+        List<PriceTick> ticks = priceHistoryBuffer.getRecentPrices(key, window);
+        if (ticks.size() < MIN_TICKS) return null;
+
+        double[] logReturns = computeLogReturns(ticks);
+        if (logReturns.length < 2) return null;
+
+        double avgIntervalSec = computeAvgIntervalSec(ticks);
+        double periodsPerYear = SECONDS_PER_YEAR / avgIntervalSec;
+
+        return garchEstimator.estimate(logReturns, periodsPerYear);
+    }
+
+    private double computeAnnualized(String symbol, Duration window) {
+        if ("garch".equalsIgnoreCase(volatilityProperties.getModel())) {
+            return computeGarchAnnualized(symbol, window);
+        }
+        return computeEwmaAnnualized(symbol, window);
+    }
+
+    private double computeGarchAnnualized(String symbol, Duration window) {
+        List<PriceTick> ticks = priceHistoryBuffer.getRecentPrices(symbol, window);
+        if (ticks.size() < MIN_TICKS) {
+            return DEFAULT_ANNUAL_VOL;
+        }
+
+        double[] logReturns = computeLogReturns(ticks);
+        if (logReturns.length < 2) return DEFAULT_ANNUAL_VOL;
+
+        double avgIntervalSec = computeAvgIntervalSec(ticks);
+        double periodsPerYear = SECONDS_PER_YEAR / avgIntervalSec;
+
+        GarchResult result = garchEstimator.estimate(logReturns, periodsPerYear);
+        if (result == null) return DEFAULT_ANNUAL_VOL;
+
+        return result.getAnnualizedSigma();
     }
 
     private double computeEwmaAnnualized(String symbol, Duration window) {

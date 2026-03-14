@@ -23,7 +23,7 @@ public class VolatilitySnapshot {
     private long timestamp;
 
     public enum EstimationMethod {
-        EWMA
+        EWMA, GARCH
     }
 
     public double getSigmaForLabel(String label) {

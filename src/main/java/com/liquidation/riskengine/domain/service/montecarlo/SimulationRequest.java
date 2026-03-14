@@ -27,4 +27,6 @@ public class SimulationRequest {
 
     @Builder.Default
     private final double degreesOfFreedom = 5.0;
+
+    private final double[] sigmaSchedule;
 }
