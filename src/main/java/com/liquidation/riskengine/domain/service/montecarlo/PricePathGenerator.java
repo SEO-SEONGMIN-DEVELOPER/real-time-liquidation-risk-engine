@@ -24,6 +24,8 @@ public class PricePathGenerator {
         double nu = request.getDegreesOfFreedom();
         double[] sigmaSchedule = request.getSigmaSchedule();
 
+        int evenPathCount = pathCount + (pathCount % 2);
+
         double dt = stepMinutes / MINUTES_PER_YEAR;
         double sqrtDt = Math.sqrt(dt);
 
@@ -42,46 +44,34 @@ public class PricePathGenerator {
         } else {
             double constDrift = (mu - 0.5 * sigma * sigma) * dt;
             double constDiff = sigma * sqrtDt;
-            driftPerStep = null;
-            diffPerStep = null;
-            var cd = constDrift;
-            var cf = constDiff;
-
-            double[][] paths = new double[pathCount][totalSteps + 1];
-            SplittableRandom rng = new SplittableRandom();
-            long startNano = System.nanoTime();
-
-            for (int i = 0; i < pathCount; i++) {
-                paths[i][0] = s0;
-                for (int t = 1; t <= totalSteps; t++) {
-                    double z = rng.nextGaussian();
-                    if (fatTail) z = applyStudentT(z, nu, rng);
-                    paths[i][t] = paths[i][t - 1] * Math.exp(cd + cf * z);
-                }
+            driftPerStep = new double[totalSteps];
+            diffPerStep = new double[totalSteps];
+            for (int t = 0; t < totalSteps; t++) {
+                driftPerStep[t] = constDrift;
+                diffPerStep[t] = constDiff;
             }
-
-            long elapsedMs = (System.nanoTime() - startNano) / 1_000_000;
-            log.debug("[PricePath] 생성 완료: paths={}, steps={}, sigma={:.4f}, fatTail={}, elapsed={}ms",
-                    pathCount, totalSteps, sigma, fatTail, elapsedMs);
-            return paths;
         }
 
-        double[][] paths = new double[pathCount][totalSteps + 1];
+        double[][] paths = new double[evenPathCount][totalSteps + 1];
         SplittableRandom rng = new SplittableRandom();
         long startNano = System.nanoTime();
 
-        for (int i = 0; i < pathCount; i++) {
+        for (int i = 0; i < evenPathCount; i += 2) {
             paths[i][0] = s0;
+            paths[i + 1][0] = s0;
             for (int t = 1; t <= totalSteps; t++) {
                 double z = rng.nextGaussian();
                 if (fatTail) z = applyStudentT(z, nu, rng);
-                paths[i][t] = paths[i][t - 1] * Math.exp(driftPerStep[t - 1] + diffPerStep[t - 1] * z);
+                double dr = driftPerStep[t - 1];
+                double df = diffPerStep[t - 1];
+                paths[i][t]     = paths[i][t - 1]     * Math.exp(dr + df * z);
+                paths[i + 1][t] = paths[i + 1][t - 1] * Math.exp(dr + df * (-z));
             }
         }
 
         long elapsedMs = (System.nanoTime() - startNano) / 1_000_000;
-        log.debug("[PricePath] 생성 완료: paths={}, steps={}, sigma={:.4f}, mode=GARCH, fatTail={}, elapsed={}ms",
-                pathCount, totalSteps, sigma, fatTail, elapsedMs);
+        log.debug("[PricePath] 생성 완료: paths={}, steps={}, sigma={:.4f}, fatTail={}, antithetic=true, mode={}, elapsed={}ms",
+                evenPathCount, totalSteps, sigma, fatTail, useSchedule ? "GARCH" : "CONST", elapsedMs);
 
         return paths;
     }
@@ -110,22 +100,22 @@ public class PricePathGenerator {
 
     private void validateRequest(SimulationRequest request) {
         if (request.getStartPrice() <= 0) {
-            throw new IllegalArgumentException("startPrice must be positive");
+            throw new IllegalArgumentException("시작 가격은 양수여야 합니다");
         }
         if (request.getSigma() <= 0) {
-            throw new IllegalArgumentException("sigma must be positive");
+            throw new IllegalArgumentException("변동성(sigma)은 양수여야 합니다");
         }
         if (request.getPathCount() <= 0) {
-            throw new IllegalArgumentException("pathCount must be positive");
+            throw new IllegalArgumentException("경로 수(pathCount)는 양수여야 합니다");
         }
         if (request.getTimeStepMinutes() <= 0) {
-            throw new IllegalArgumentException("timeStepMinutes must be positive");
+            throw new IllegalArgumentException("시간 간격(timeStepMinutes)은 양수여야 합니다");
         }
         if (request.getHorizonMinutes() <= 0) {
-            throw new IllegalArgumentException("horizonMinutes must be positive");
+            throw new IllegalArgumentException("시뮬레이션 기간(horizonMinutes)은 양수여야 합니다");
         }
         if (request.isUseFatTail() && request.getDegreesOfFreedom() <= 2) {
-            throw new IllegalArgumentException("degreesOfFreedom must be > 2 for finite variance");
+            throw new IllegalArgumentException("자유도(degreesOfFreedom)는 유한 분산을 위해 2보다 커야 합니다");
         }
     }
 }

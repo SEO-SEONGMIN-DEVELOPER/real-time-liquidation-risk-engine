@@ -26,6 +26,7 @@ public class MonteCarloSimulationService {
     private final LiquidationDetector liquidationDetector;
     private final MonteCarloProperties properties;
     private final DriftEstimator driftEstimator;
+    private final TailEstimator tailEstimator;
 
     private final Map<String, MonteCarloReport> latestReports = new ConcurrentHashMap<>();
 
@@ -61,6 +62,11 @@ public class MonteCarloSimulationService {
 
         double mu = driftEstimator.estimate(symbol);
 
+        double nu = properties.getDegreesOfFreedom();
+        if (properties.isUseFatTail()) {
+            nu = tailEstimator.estimateDegreesOfFreedom(symbol, volWindow);
+        }
+
         SimulationRequest request = SimulationRequest.builder()
                 .startPrice(currentPrice.doubleValue())
                 .sigma(sigma)
@@ -69,7 +75,7 @@ public class MonteCarloSimulationService {
                 .timeStepMinutes(properties.getTimeStepMinutes())
                 .horizonMinutes(properties.maxHorizonMinutes())
                 .useFatTail(properties.isUseFatTail())
-                .degreesOfFreedom(properties.getDegreesOfFreedom())
+                .degreesOfFreedom(nu)
                 .sigmaSchedule(sigmaSchedule)
                 .build();
 
@@ -85,8 +91,8 @@ public class MonteCarloSimulationService {
                 properties.horizonsArray());
 
         long totalMicros = (System.nanoTime() - startNano) / 1_000;
-        log.info("[MC] 시뮬레이션 완료: symbol={}, side={}, σ={:.4f}, μ={:.4f}, risk={}, paths={}, total={}μs",
-                symbol, positionSide, sigma, mu, report.getRiskLevel(),
+        log.info("[MC] 시뮬레이션 완료: symbol={}, side={}, σ={:.4f}, μ={:.4f}, ν={:.1f}, risk={}, paths={}, total={}μs",
+                symbol, positionSide, sigma, mu, nu, report.getRiskLevel(),
                 properties.getPathCount(), totalMicros);
 
         latestReports.put(symbol.toUpperCase(), report);
