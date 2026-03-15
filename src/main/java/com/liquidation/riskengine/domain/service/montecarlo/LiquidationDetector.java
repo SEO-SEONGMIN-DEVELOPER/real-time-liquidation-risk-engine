@@ -3,6 +3,8 @@ package com.liquidation.riskengine.domain.service.montecarlo;
 import com.liquidation.riskengine.domain.model.MonteCarloReport;
 import com.liquidation.riskengine.domain.model.MonteCarloReport.HorizonResult;
 import com.liquidation.riskengine.domain.model.MonteCarloReport.McRiskLevel;
+import com.liquidation.riskengine.domain.service.calibration.CalibrationCorrector;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -12,7 +14,10 @@ import java.util.List;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class LiquidationDetector {
+
+    private final CalibrationCorrector calibrationCorrector;
 
     static final int[] DEFAULT_HORIZON_MINUTES = {10, 60, 240, 1440};
     private static final int RISK_LEVEL_HORIZON = 1440;
@@ -96,9 +101,13 @@ public class LiquidationDetector {
 
         Arrays.sort(pricesAtStep);
 
+        double rawProb = (double) liquidatedCount / pathCount;
+        double calibratedProb = calibrationCorrector.correctMc(rawProb);
+
         return HorizonResult.builder()
                 .minutes(horizonMinutes)
-                .liquidationProbability((double) liquidatedCount / pathCount)
+                .liquidationProbability(rawProb)
+                .calibratedProbability(calibratedProb)
                 .pricePercentile5(percentile(pricesAtStep, 5))
                 .pricePercentile25(percentile(pricesAtStep, 25))
                 .priceMedian(percentile(pricesAtStep, 50))
@@ -111,9 +120,9 @@ public class LiquidationDetector {
         return horizons.stream()
                 .filter(h -> h.getMinutes() == RISK_LEVEL_HORIZON)
                 .findFirst()
-                .map(h -> McRiskLevel.fromProbability(h.getLiquidationProbability()))
+                .map(h -> McRiskLevel.fromProbability(h.getCalibratedProbability()))
                 .orElse(McRiskLevel.fromProbability(
-                        horizons.getLast().getLiquidationProbability()));
+                        horizons.getLast().getCalibratedProbability()));
     }
 
     private double percentile(double[] sorted, int p) {

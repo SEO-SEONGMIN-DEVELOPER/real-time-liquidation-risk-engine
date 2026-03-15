@@ -46,6 +46,7 @@ public class CascadeRiskReport {
     private double densityScore;
     private DensityLevel densityLevel;
     private double cascadeReachProbability;
+    private double calibratedReachProbability;
     private RiskLevel riskLevel;
 
     private long timestamp;
