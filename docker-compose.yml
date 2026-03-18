@@ -7,12 +7,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev
-      - DB_URL=jdbc:postgresql://postgres:5432/riskengine
-      - DB_USERNAME=riskengine
-      - DB_PASSWORD=riskengine
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/riskengine
+      - SPRING_DATASOURCE_USERNAME=riskengine
+      - SPRING_DATASOURCE_PASSWORD=riskengine
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO:-validate}
     depends_on:
       postgres:
         condition: service_healthy
