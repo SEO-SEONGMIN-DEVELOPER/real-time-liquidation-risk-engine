@@ -5,6 +5,7 @@ import com.liquidation.riskengine.domain.model.LiquidationEvent;
 import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
 import com.liquidation.riskengine.domain.model.OrderBookSnapshot;
 import com.liquidation.riskengine.domain.service.CascadeRiskCalculator;
+import com.liquidation.riskengine.domain.service.RiskStateManager;
 import com.liquidation.riskengine.infra.redis.service.RedisTimeSeriesService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import java.util.List;
 public class CascadeRiskController {
 
     private final CascadeRiskCalculator cascadeRiskCalculator;
+    private final RiskStateManager riskStateManager;
     private final RedisTimeSeriesService redisTimeSeriesService;
 
     @GetMapping("/cascade")
@@ -39,15 +41,15 @@ public class CascadeRiskController {
         CascadeRiskReport report = cascadeRiskCalculator.analyzeDistance(
                 currentPrice, userLiquidationPrice, positionSide, symbol);
 
-        OrderBookSnapshot orderBook = redisTimeSeriesService.getLatestOrderBook(symbol);
+        OrderBookSnapshot orderBook = riskStateManager.getLatestOrderBook(symbol);
         if (orderBook != null) {
             cascadeRiskCalculator.analyzeOrderBookDensity(report, orderBook);
         }
 
-        BigDecimal totalOi = fetchTotalOi(symbol);
+        OpenInterestSnapshot latestOi = riskStateManager.getLatestOpenInterest(symbol);
+        BigDecimal totalOi = latestOi != null ? latestOi.getOpenInterest() : null;
         cascadeRiskCalculator.mapLiquidationClusters(report, totalOi);
 
-        OpenInterestSnapshot latestOi = fetchLatestOiSnapshot(symbol);
         List<LiquidationEvent> recentLiqs = redisTimeSeriesService.getRecentLiquidationEvents(
                 symbol, Duration.ofMinutes(30));
         cascadeRiskCalculator.analyzeMarketPressure(report, latestOi, recentLiqs, orderBook, positionSide);
@@ -55,26 +57,5 @@ public class CascadeRiskController {
         cascadeRiskCalculator.synthesize(report);
 
         return ResponseEntity.ok(report);
-    }
-
-    private BigDecimal fetchTotalOi(String symbol) {
-        Object oiValue = redisTimeSeriesService.getLatestOpenInterest(symbol);
-        if (oiValue != null) {
-            try {
-                return new BigDecimal(oiValue.toString());
-            } catch (NumberFormatException e) {
-                log.debug("OI parse error: {}", oiValue);
-            }
-        }
-        return null;
-    }
-
-    private OpenInterestSnapshot fetchLatestOiSnapshot(String symbol) {
-        List<OpenInterestSnapshot> snapshots = redisTimeSeriesService.getRecentOpenInterestSnapshots(
-                symbol, Duration.ofMinutes(10));
-        if (snapshots != null && !snapshots.isEmpty()) {
-            return snapshots.get(snapshots.size() - 1);
-        }
-        return null;
     }
 }
