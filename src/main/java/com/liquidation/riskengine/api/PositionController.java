@@ -35,6 +35,11 @@ public class PositionController {
 
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody UserPosition position) {
+        if (position.getUserId() == null || position.getUserId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "userId는 필수입니다"));
+        }
         if (position.getSymbol() == null || position.getSymbol().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
@@ -48,59 +53,76 @@ public class PositionController {
 
         riskStateManager.registerPosition(position);
 
+        String userId = position.getUserId().trim().toLowerCase();
         String symbol = position.getSymbol().toUpperCase();
-        log.info("[Position API] 포지션 등록 요청: symbol={}, liqPrice={}, side={}, leverage={}x",
-                symbol, position.getLiquidationPrice(),
+        log.info("[Position API] 포지션 등록 요청: userId={}, symbol={}, liqPrice={}, side={}, leverage={}x",
+                userId, symbol, position.getLiquidationPrice(),
                 position.getPositionSide(), position.getLeverage());
 
         CompletableFuture.runAsync(() -> {
             try {
-                mcService.simulate(symbol, position.getLiquidationPrice(), position.getPositionSide())
+                mcService.simulate(userId, symbol, position.getLiquidationPrice(), position.getPositionSide())
                         .ifPresent(mcReport -> {
-                            String dest = "/topic/mc/" + symbol;
+                            String dest = "/topic/mc/" + userId + "/" + symbol;
                             messagingTemplate.convertAndSend(dest, mcReport);
                             calibrationLogger.logPrediction(mcReport);
-                            log.info("[Position API] 즉시 MC 완료: symbol={}, risk={}", symbol, mcReport.getRiskLevel());
+                            log.info("[Position API] 즉시 MC 완료: userId={}, symbol={}, risk={}",
+                                    userId, symbol, mcReport.getRiskLevel());
                         });
             } catch (Exception e) {
-                log.warn("[Position API] 즉시 MC 실패: symbol={}", symbol, e);
+                log.warn("[Position API] 즉시 MC 실패: userId={}, symbol={}", userId, symbol, e);
             }
         });
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
+                "userId", userId,
                 "symbol", symbol,
+                "wsTopic", "/topic/risk/" + userId + "/" + symbol,
                 "message", "포지션이 등록되었습니다. 해당 심볼의 실시간 위험 계산이 시작됩니다."));
     }
 
     @DeleteMapping("/unregister")
-    public ResponseEntity<Map<String, Object>> unregister(@RequestParam String symbol) {
+    public ResponseEntity<Map<String, Object>> unregister(
+            @RequestParam String userId,
+            @RequestParam String symbol) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "userId는 필수입니다"));
+        }
         if (symbol == null || symbol.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
                     "message", "symbol은 필수입니다"));
         }
 
+        String normalizedUserId = userId.trim().toLowerCase();
         String normalized = symbol.toUpperCase();
-        UserPosition existing = riskStateManager.getPosition(normalized);
+        UserPosition existing = riskStateManager.getPosition(normalizedUserId, normalized);
         if (existing == null) {
             return ResponseEntity.ok(Map.of(
                     "success", false,
+                    "userId", normalizedUserId,
                     "symbol", normalized,
                     "message", "등록된 포지션이 없습니다."));
         }
 
-        riskStateManager.removePosition(normalized);
-        log.info("[Position API] 포지션 해제 요청: symbol={}", normalized);
+        riskStateManager.removePosition(normalizedUserId, normalized);
+        log.info("[Position API] 포지션 해제 요청: userId={}, symbol={}", normalizedUserId, normalized);
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
+                "userId", normalizedUserId,
                 "symbol", normalized,
                 "message", "포지션이 해제되었습니다. 해당 심볼의 위험 계산이 중단됩니다."));
     }
 
     @GetMapping("/list")
-    public ResponseEntity<Collection<UserPosition>> listPositions() {
-        return ResponseEntity.ok(riskStateManager.getAllPositions());
+    public ResponseEntity<Collection<UserPosition>> listPositions(@RequestParam String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.badRequest().body(java.util.List.of());
+        }
+        return ResponseEntity.ok(riskStateManager.getPositionsByUser(userId));
     }
 }

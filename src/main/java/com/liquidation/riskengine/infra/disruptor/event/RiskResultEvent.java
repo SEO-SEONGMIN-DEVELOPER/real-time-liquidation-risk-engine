@@ -5,14 +5,24 @@ import com.liquidation.riskengine.domain.model.MonteCarloReport;
 
 public class RiskResultEvent {
 
+    private String userId;
     private CascadeRiskReport report;
     private MonteCarloReport mcReport;
     private long calcNanoTime;
 
     public void clear() {
+        userId = null;
         report = null;
         mcReport = null;
         calcNanoTime = 0L;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     public CascadeRiskReport getReport() {
@@ -43,7 +53,7 @@ public class RiskResultEvent {
     public String toString() {
         String sym = report != null ? report.getSymbol()
                 : (mcReport != null ? mcReport.getSymbol() : "null");
-        return "RiskResultEvent{symbol=" + sym + ", cascade=" + (report != null)
+        return "RiskResultEvent{userId=" + userId + ", symbol=" + sym + ", cascade=" + (report != null)
                 + ", mc=" + (mcReport != null) + "}";
     }
 }
