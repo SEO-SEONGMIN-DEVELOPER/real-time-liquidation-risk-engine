@@ -3,11 +3,11 @@ package com.liquidation.riskengine.domain.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.io.Serializable;
+
 @Entity
-@Table(name = "cascade_prediction_record", indexes = {
-        @Index(name = "idx_cascade_pred_symbol_verified", columnList = "symbol, verified"),
-        @Index(name = "idx_cascade_pred_deadline", columnList = "deadlineEpochMs, verified")
-})
+@Table(name = "cascade_prediction_record")
+@IdClass(CascadePredictionRecord.CascadePredictionKey.class)
 @Getter
 @Setter
 @Builder
@@ -16,8 +16,12 @@ import lombok.*;
 public class CascadePredictionRecord {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "cascade_pred_seq")
+    @SequenceGenerator(name = "cascade_pred_seq", sequenceName = "cascade_prediction_record_id_seq", allocationSize = 50)
     private Long id;
+
+    @Id
+    private long predictionEpochMs;
 
     private String symbol;
     private String positionSide;
@@ -28,7 +32,6 @@ public class CascadePredictionRecord {
     private double priceAtPrediction;
     private double liquidationPrice;
 
-    private long predictionEpochMs;
     private long deadlineEpochMs;
 
     private boolean verified;
@@ -37,4 +40,12 @@ public class CascadePredictionRecord {
     private Double priceMinDuringHorizon;
     private Double priceMaxDuringHorizon;
     private Long verifiedEpochMs;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CascadePredictionKey implements Serializable {
+        private Long id;
+        private long predictionEpochMs;
+    }
 }

@@ -3,11 +3,11 @@ package com.liquidation.riskengine.domain.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.io.Serializable;
+
 @Entity
-@Table(name = "mc_prediction_record", indexes = {
-        @Index(name = "idx_mc_pred_symbol_verified", columnList = "symbol, verified"),
-        @Index(name = "idx_mc_pred_deadline", columnList = "deadlineEpochMs, verified")
-})
+@Table(name = "mc_prediction_record")
+@IdClass(McPredictionRecord.McPredictionKey.class)
 @Getter
 @Setter
 @Builder
@@ -16,8 +16,12 @@ import lombok.*;
 public class McPredictionRecord {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "mc_pred_seq")
+    @SequenceGenerator(name = "mc_pred_seq", sequenceName = "mc_prediction_record_id_seq", allocationSize = 50)
     private Long id;
+
+    @Id
+    private long predictionEpochMs;
 
     private String symbol;
     private int horizonMinutes;
@@ -27,7 +31,6 @@ public class McPredictionRecord {
     private String positionSide;
     private double sigma;
 
-    private long predictionEpochMs;
     private long deadlineEpochMs;
 
     private boolean verified;
@@ -36,4 +39,12 @@ public class McPredictionRecord {
     private Double priceMinDuringHorizon;
     private Double priceMaxDuringHorizon;
     private Long verifiedEpochMs;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class McPredictionKey implements Serializable {
+        private Long id;
+        private long predictionEpochMs;
+    }
 }
