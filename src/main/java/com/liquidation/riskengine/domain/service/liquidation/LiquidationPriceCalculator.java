@@ -1,7 +1,6 @@
-package com.liquidation.riskengine.domain.service;
+package com.liquidation.riskengine.domain.service.liquidation;
 
 import com.liquidation.riskengine.domain.model.MaintenanceMarginTier;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -14,12 +13,23 @@ import java.util.Map;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LiquidationPriceCalculator {
 
-    private final LeverageDistributionService leverageDistributionService;
-
     private static final MathContext MC = new MathContext(12, RoundingMode.HALF_UP);
+
+    private static final Map<Integer, Double> PRIOR_WEIGHTS = Map.ofEntries(
+            Map.entry(125, 0.03),
+            Map.entry(100, 0.05),
+            Map.entry(75,  0.07),
+            Map.entry(50,  0.18),
+            Map.entry(25,  0.22),
+            Map.entry(20,  0.15),
+            Map.entry(10,  0.16),
+            Map.entry(5,   0.08),
+            Map.entry(4,   0.03),
+            Map.entry(3,   0.02),
+            Map.entry(2,   0.01)
+    );
 
     public BigDecimal calculateLongLiquidationPrice(
             BigDecimal entryPrice, int leverage, BigDecimal quantity, String symbol) {
@@ -51,7 +61,6 @@ public class LiquidationPriceCalculator {
             BigDecimal currentPrice, String symbol, BigDecimal totalOi) {
 
         List<MaintenanceMarginTier> tiers = MaintenanceMarginTier.getTiersForSymbol(symbol);
-        Map<Integer, Double> distribution = leverageDistributionService.getDistribution(symbol);
         List<EstimatedLiquidation> results = new ArrayList<>();
 
         for (MaintenanceMarginTier tier : tiers) {
@@ -69,7 +78,7 @@ public class LiquidationPriceCalculator {
             BigDecimal shortLiqPrice = currentPrice.multiply(shortFactor, MC)
                     .setScale(2, RoundingMode.HALF_UP);
 
-            double weight = distribution.getOrDefault(leverage, 0.0);
+            double weight = PRIOR_WEIGHTS.getOrDefault(leverage, 0.0);
 
             BigDecimal estimatedVolume = BigDecimal.ZERO;
             BigDecimal estimatedNotional = BigDecimal.ZERO;
@@ -84,11 +93,9 @@ public class LiquidationPriceCalculator {
                     leverage, longLiqPrice, shortLiqPrice,
                     weight, estimatedVolume, estimatedNotional, tier));
 
-            log.debug("[LiqCalc] {} lev={}x long={} short={} weight={}% vol={} notional={}",
+            log.debug("[LiqCalc-fallback] {} lev={}x long={} short={} weight={}%",
                     symbol, leverage, longLiqPrice, shortLiqPrice,
-                    String.format("%.2f", weight * 100),
-                    estimatedVolume.toPlainString(),
-                    estimatedNotional.toPlainString());
+                    String.format("%.2f", weight * 100));
         }
 
         return results;

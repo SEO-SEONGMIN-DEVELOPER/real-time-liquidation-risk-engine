@@ -2,10 +2,10 @@ package com.liquidation.riskengine.infra.disruptor.handler;
 
 import com.lmax.disruptor.EventHandler;
 import com.liquidation.riskengine.domain.model.LiquidationEvent;
-import com.liquidation.riskengine.domain.service.LeverageDistributionService;
-import com.liquidation.riskengine.domain.service.MarkPriceCache;
-import com.liquidation.riskengine.domain.service.PriceHistoryBuffer;
-import com.liquidation.riskengine.domain.service.RiskStateManager;
+import com.liquidation.riskengine.domain.model.OpenInterestSnapshot;
+import com.liquidation.riskengine.domain.service.liquidation.LiquidationClusterMap;
+import com.liquidation.riskengine.domain.service.state.PriceHistoryBuffer;
+import com.liquidation.riskengine.domain.service.state.RiskStateManager;
 import com.liquidation.riskengine.infra.binance.dto.MarkPriceEvent;
 import com.liquidation.riskengine.infra.disruptor.event.MarketDataEvent;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +19,8 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class CacheUpdateHandler implements EventHandler<MarketDataEvent> {
 
-    private final MarkPriceCache markPriceCache;
     private final PriceHistoryBuffer priceHistoryBuffer;
-    private final LeverageDistributionService leverageDistributionService;
+    private final LiquidationClusterMap liquidationClusterMap;
     private final RiskStateManager riskStateManager;
 
     @Override
@@ -41,7 +40,7 @@ public class CacheUpdateHandler implements EventHandler<MarketDataEvent> {
         MarkPriceEvent mp = event.getMarkPrice();
         if (mp == null) return;
 
-        markPriceCache.update(mp.getSymbol(), mp.getMarkPrice());
+        riskStateManager.updateMarkPrice(mp.getSymbol(), mp.getMarkPrice());
         priceHistoryBuffer.record(mp.getSymbol(), mp.getMarkPrice(), mp.getEventTime());
         log.debug("[Cache] MARK_PRICE 갱신: symbol={}, price={}", mp.getSymbol(), mp.getMarkPrice());
     }
@@ -51,16 +50,9 @@ public class CacheUpdateHandler implements EventHandler<MarketDataEvent> {
         if (liq == null) return;
 
         riskStateManager.addLiquidation(liq);
-
-        BigDecimal markPrice = markPriceCache.get(liq.getSymbol());
-        if (markPrice != null) {
-            leverageDistributionService.recordLiquidation(liq, markPrice);
-            log.debug("[Cache] FORCE_ORDER 처리: symbol={}, side={}, 레버리지 분포 업데이트",
-                    liq.getSymbol(), liq.getSide());
-        } else {
-            log.debug("[Cache] FORCE_ORDER markPrice 미존재: symbol={}, 레버리지 분포 업데이트 스킵",
-                    liq.getSymbol());
-        }
+        liquidationClusterMap.recordLiquidation(liq);
+        log.debug("[Cache] FORCE_ORDER 처리: symbol={}, side={}, 청산맵 차감",
+                liq.getSymbol(), liq.getSide());
     }
 
     private void handleOrderBook(MarketDataEvent event) {
@@ -71,8 +63,17 @@ public class CacheUpdateHandler implements EventHandler<MarketDataEvent> {
 
     private void handleOiUpdate(MarketDataEvent event) {
         if (event.getOpenInterest() == null) return;
-        riskStateManager.updateOpenInterest(event.getOpenInterest());
-        log.debug("[Cache] OI_UPDATE 갱신: symbol={}, oi={}",
-                event.getOpenInterest().getSymbol(), event.getOpenInterest().getOpenInterest());
+        OpenInterestSnapshot oi = event.getOpenInterest();
+        riskStateManager.updateOpenInterest(oi);
+
+        if (oi.getChange() != null && oi.getChange().compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal markPrice = riskStateManager.getLatestMarkPrice(oi.getSymbol());
+            if (markPrice != null) {
+                liquidationClusterMap.recordOiIncrease(oi.getSymbol(), markPrice, oi.getChange());
+            }
+        }
+
+        log.debug("[Cache] OI_UPDATE 갱신: symbol={}, oi={}, change={}",
+                oi.getSymbol(), oi.getOpenInterest(), oi.getChange());
     }
 }

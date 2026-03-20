@@ -1,7 +1,7 @@
 package com.liquidation.riskengine.api;
 
 import com.liquidation.riskengine.domain.model.UserPosition;
-import com.liquidation.riskengine.domain.service.RiskStateManager;
+import com.liquidation.riskengine.domain.service.state.RiskStateManager;
 import com.liquidation.riskengine.domain.service.montecarlo.MonteCarloSimulationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

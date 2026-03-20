@@ -2,9 +2,9 @@ package com.liquidation.riskengine.domain.service.cascade;
 
 import com.liquidation.riskengine.domain.model.CascadePredictionRecord;
 import com.liquidation.riskengine.domain.repository.CascadePredictionRepository;
-import com.liquidation.riskengine.domain.service.MarkPriceCache;
-import com.liquidation.riskengine.domain.service.PriceHistoryBuffer;
-import com.liquidation.riskengine.domain.service.PriceHistoryBuffer.MinMax;
+import com.liquidation.riskengine.domain.service.state.PriceHistoryBuffer;
+import com.liquidation.riskengine.domain.service.state.PriceHistoryBuffer.MinMax;
+import com.liquidation.riskengine.domain.service.state.RiskStateManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,7 +19,7 @@ import java.util.List;
 public class CascadeCalibrationVerifier {
 
     private final CascadePredictionRepository repository;
-    private final MarkPriceCache markPriceCache;
+    private final RiskStateManager riskStateManager;
     private final PriceHistoryBuffer priceHistoryBuffer;
 
     @Scheduled(fixedDelayString = "${cascade.calibration.verify-interval-ms:60000}")
@@ -32,7 +32,7 @@ public class CascadeCalibrationVerifier {
 
         int verified = 0;
         for (CascadePredictionRecord record : pending) {
-            BigDecimal currentPrice = markPriceCache.get(record.getSymbol());
+            BigDecimal currentPrice = riskStateManager.getLatestMarkPrice(record.getSymbol());
             if (currentPrice == null) continue;
 
             boolean isLong = "LONG".equalsIgnoreCase(record.getPositionSide());
