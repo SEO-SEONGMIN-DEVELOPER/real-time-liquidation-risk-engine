@@ -65,3 +65,18 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+bootRun {
+    jvmArgs = [
+        // G1 GC 사용 (Java 21 기본값이지만 명시적 지정)
+        '-XX:+UseG1GC',
+        // GC 상세 로깅 (STW pause 시간 포함)
+        '-Xlog:gc*:file=gc.log:time,uptime,level,tags',
+        // JMX 원격 접속 (JConsole 연결용)
+        '-Dcom.sun.management.jmxremote',
+        '-Dcom.sun.management.jmxremote.port=9010',
+        '-Dcom.sun.management.jmxremote.local.only=true',
+        '-Dcom.sun.management.jmxremote.authenticate=false',
+        '-Dcom.sun.management.jmxremote.ssl=false'
+    ]
+}

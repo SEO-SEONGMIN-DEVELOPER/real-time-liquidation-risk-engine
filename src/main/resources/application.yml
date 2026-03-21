@@ -62,7 +62,7 @@ drift:
 # Monte Carlo 시뮬레이션 설정
 montecarlo:
   enabled: true
-  path-count: 10000
+  path-count: 2000
   time-step-minutes: 1
   horizons:
     - 10
