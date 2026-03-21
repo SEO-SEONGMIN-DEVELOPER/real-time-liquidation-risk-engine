@@ -11,6 +11,8 @@ public class PricePathGenerator {
 
     static final double MINUTES_PER_YEAR = 365.25 * 24 * 60;
 
+    private final ThreadLocal<double[][]> pathBufferHolder = new ThreadLocal<>();
+
     public double[][] generate(SimulationRequest request) {
         validateRequest(request);
 
@@ -52,7 +54,7 @@ public class PricePathGenerator {
             }
         }
 
-        double[][] paths = new double[evenPathCount][totalSteps + 1];
+        double[][] paths = acquireBuffer(evenPathCount, totalSteps + 1);
         SplittableRandom rng = new SplittableRandom();
         long startNano = System.nanoTime();
 
@@ -74,6 +76,17 @@ public class PricePathGenerator {
                 evenPathCount, totalSteps, sigma, fatTail, useSchedule ? "GARCH" : "CONST", elapsedMs);
 
         return paths;
+    }
+
+    private double[][] acquireBuffer(int rows, int cols) {
+        double[][] buffer = pathBufferHolder.get();
+        if (buffer == null || buffer.length < rows || buffer[0].length < cols) {
+            buffer = new double[rows][cols];
+            pathBufferHolder.set(buffer);
+            log.debug("[PricePath] 배열 풀 새 버퍼 할당: {}×{} ({} MB)",
+                    rows, cols, rows * cols * 8 / (1024 * 1024));
+        }
+        return buffer;
     }
 
     private double applyStudentT(double z, double nu, SplittableRandom rng) {
